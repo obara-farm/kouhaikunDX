@@ -39,6 +39,11 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
 .bull-btn.instock{border-color:var(--akane);border-width:2px;}
 .bull-btn .bn{font-size:15px;font-weight:800;color:var(--ink);}
 .bull-btn .stk{font-size:11px;font-weight:700;color:var(--akane);background:var(--warn-bg);border-radius:10px;padding:1px 8px;}
+.bull-btn .bpct{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;}
+.bull-btn.b-safe{background:var(--safe-bg);border-color:#7fc394;} .bull-btn.b-safe .bpct{color:var(--safe);}
+.bull-btn.b-warn{background:var(--warn-bg);border-color:#e0bd6a;} .bull-btn.b-warn .bpct{color:var(--warn);}
+.bull-btn.b-danger{background:var(--danger-bg);border-color:#dd9d92;} .bull-btn.b-danger .bpct{color:var(--danger);}
+.bull-btn.b-safe.instock,.bull-btn.b-warn.instock,.bull-btn.b-danger.instock{border-width:2px;}
 .bull-btn.nocalc{opacity:.55;} .bull-btn .nc{font-size:10px;color:var(--ink2);}
 .verdict{display:none;border-radius:16px;padding:22px 16px;text-align:center;margin-bottom:14px;border:2px solid;}
 .verdict .v-pair{font-size:16px;font-weight:800;margin-bottom:6px;} .verdict .v-pair .x{opacity:.5;margin:0 4px;}
@@ -374,8 +379,15 @@ function renderBulls(){
   KORDER.forEach(k=>{ if(!groups[k])return; const items=groups[k].sort((a,b)=>b.stock-a.stock);
     html+='<div class="keitou-group"><div class="keitou-h">'+esc(k)+'</div><div class="bull-grid">';
     items.forEach(b=>{ const canCalc=!!b.yomi&&MC.A.indexOf(b.yomi)>=0;
-      html+='<button class="bull-btn'+(b.inStock?' instock':'')+(canCalc?'':' nocalc')+'" onclick="pickBull(\''+esc(b.yomi)+'\',\''+esc(b.name).replace(/\'/g,"")+'\')">'
+      let ccls="", pctHtml="";
+      if(canCalc && curFemale){
+        const cf=engine.compute(curFemale.s1,curFemale.s2,curFemale.s3,curFemale.s4,b.yomi);
+        if(cf>=12.5)ccls=" b-danger"; else if(cf>=6.25)ccls=" b-warn"; else ccls=" b-safe";
+        pctHtml='<span class="bpct">'+cf.toFixed(2)+'%</span>';
+      }
+      html+='<button class="bull-btn'+(b.inStock?' instock':'')+(canCalc?'':' nocalc')+ccls+'" onclick="pickBull(\''+esc(b.yomi)+'\',\''+esc(b.name).replace(/\'/g,"")+'\')">'
         +'<span class="bn">'+esc(b.name)+'</span>'
+        +pctHtml
         +(b.inStock?'<span class="stk">在庫'+b.stock+'</span>':'')
         +(canCalc?'':'<span class="nc">血統未登録</span>')+'</button>';
     });
