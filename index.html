@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>あか牛 交配ツール（近交係数）</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+:root{
+  --paper:#f5f2ec; --ink:#231f1a; --ink2:#6b6255; --line:#ddd6ca;
+  --card:#fffdf8; --akane:#a8321e; --akane-d:#7d2416;
+  --safe:#2f7d4f; --safe-bg:#e4f0e6; --warn:#b5791a; --warn-bg:#faf0da; --danger:#b5271a; --danger-bg:#f7e2df;
+  --shadow:0 1px 3px rgba(60,40,20,.08),0 6px 20px rgba(60,40,20,.06);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Hiragino Kaku Gothic ProN","Yu Gothic Medium","Noto Sans JP",sans-serif;
+  font-size:16px;line-height:1.6;padding-bottom:40px;}
+header{background:var(--akane);color:#fff;padding:14px 18px;position:sticky;top:0;z-index:50;box-shadow:var(--shadow);}
+header h1{margin:0;font-size:19px;font-weight:800;display:flex;align-items:center;gap:8px;}
+header .sub{font-size:11px;opacity:.85;margin-top:2px;}
+.wrap{max-width:680px;margin:0 auto;padding:16px;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:var(--shadow);}
+.card h2{margin:0 0 12px;font-size:15px;font-weight:800;color:var(--akane-d);display:flex;align-items:center;gap:8px;justify-content:space-between;}
+.card h2 .r{font-size:12px;font-weight:700;}
+label.fld{display:block;margin-bottom:10px;}
+label.fld .lb{font-size:12px;color:var(--ink2);font-weight:700;margin-bottom:3px;display:block;}
+label.fld .lb .en{font-weight:400;opacity:.7;font-size:11px;}
+input[type=text]{width:100%;font-size:17px;padding:12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);}
+input[type=text]:focus{outline:none;border-color:var(--akane);}
+.btn{display:block;width:100%;font-size:17px;font-weight:800;padding:15px;border:none;border-radius:12px;cursor:pointer;background:var(--akane);color:#fff;box-shadow:var(--shadow);}
+.btn:active{transform:translateY(1px);}
+.btn.sec{background:#fff;color:var(--akane-d);border:1.5px solid var(--line);box-shadow:none;font-weight:700;font-size:15px;}
+.btn.sm{font-size:13px;padding:8px 12px;width:auto;display:inline-block;}
+.btn.big-pick{background:var(--akane-d);margin-bottom:10px;font-size:16px;padding:14px;}
+.hint{font-size:12px;color:var(--ink2);margin:2px 0 12px;}
+.result-row{display:flex;align-items:center;gap:11px;padding:13px 14px;border-radius:11px;margin-bottom:8px;border:1.5px solid transparent;}
+.result-row .rank{font-size:12px;font-weight:800;color:var(--ink2);min-width:20px;text-align:center;}
+.result-row .bull{flex:1;font-size:16px;font-weight:800;}
+.result-row .coef{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;}
+.result-row .coef .pct{font-size:13px;font-weight:700;}
+.result-row .tag{font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;}
+.r-safe{background:var(--safe-bg);border-color:#bfe0c8;} .r-safe .coef,.r-safe .tag{color:var(--safe);} .r-safe .tag{background:#fff;}
+.r-warn{background:var(--warn-bg);border-color:#ecd6a3;} .r-warn .coef,.r-warn .tag{color:var(--warn);} .r-warn .tag{background:#fff;}
+.r-danger{background:var(--danger-bg);border-color:#e8bdb6;} .r-danger .coef,.r-danger .tag{color:var(--danger);} .r-danger .tag{background:#fff;}
+.result-row.unknown{opacity:.6;}
+.legend{display:flex;gap:6px;flex-wrap:wrap;font-size:11px;margin-bottom:12px;}
+.legend span{padding:3px 9px;border-radius:20px;font-weight:700;}
+.selbox{background:var(--warn-bg);border:1.5px solid #ecd6a3;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px;display:none;}
+.selbox.on{display:block;} .selbox b{color:var(--akane-d);} .selbox .ped{font-size:12px;color:var(--ink2);margin-top:3px;}
+.ac-wrap{position:relative;}
+.ac-list{position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--akane);border-top:none;border-radius:0 0 10px 10px;max-height:260px;overflow-y:auto;z-index:30;box-shadow:var(--shadow);}
+.ac-item{padding:12px;font-size:15px;cursor:pointer;border-bottom:1px solid var(--line);}
+.ac-item:active{background:var(--warn-bg);}
+.ac-item .n{font-weight:700;} .ac-item .y{font-size:11px;color:var(--ink2);margin-left:6px;}
+.ac-item .tag2{font-size:10px;color:var(--akane);border:1px solid var(--akane);border-radius:4px;padding:0 4px;margin-left:6px;}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(35,25,15,.55);z-index:100;align-items:flex-end;justify-content:center;}
+.modal-bg.open{display:flex;}
+.modal{background:var(--paper);width:100%;max-width:680px;max-height:92vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:18px;}
+.modal h2{margin:0 0 4px;font-size:17px;color:var(--akane-d);}
+.modal .x{float:right;font-size:26px;color:var(--ink2);background:none;border:none;cursor:pointer;line-height:1;}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.status{font-size:11px;color:var(--ink2);text-align:center;padding:6px;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 20px;border-radius:24px;font-size:14px;font-weight:700;z-index:200;opacity:0;transition:opacity .3s;box-shadow:var(--shadow);}
+.toast.show{opacity:1;}
+.small{font-size:12px;color:var(--ink2);}
+.chip{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1.5px solid var(--line);border-radius:20px;padding:5px 6px 5px 12px;font-size:13px;font-weight:700;margin:0 6px 6px 0;}
+.chip button{background:none;border:none;color:var(--danger);font-size:17px;cursor:pointer;padding:0 4px;line-height:1;}
+.picklist{max-height:60vh;overflow-y:auto;}
+.pick-item{padding:13px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:16px;display:flex;justify-content:space-between;align-items:center;}
+.pick-item:active{background:var(--warn-bg);}
+.pick-item .sub{font-size:12px;color:var(--ink2);}
+.searchbar{width:100%;font-size:17px;padding:13px;border:1.5px solid var(--akane);border-radius:10px;margin-bottom:10px;position:sticky;top:0;}
+.warnbox{background:var(--danger-bg);border:1px solid #e8bdb6;border-radius:8px;padding:8px 10px;font-size:12px;color:var(--danger);margin-top:8px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap" style="padding:0;">
+    <h1>🐂 あか牛 交配ツール</h1>
+    <div class="sub">母牛の血統から、種雄牛ごとの近交係数を計算</div>
+  </div>
+</header>
+<div class="wrap">
+
+  <div class="card">
+    <h2>① 母牛を選ぶ</h2>
+    <button class="btn big-pick" onclick="openPickCow()">📋 在籍牛から選ぶ</button>
+    <div class="selbox" id="selCow"></div>
+    <div class="hint">在籍牛を選ぶと父・母の父が自動で入ります。手入力もできます（わかる範囲でOK）。</div>
+    <label class="fld"><span class="lb">父　<span class="en">(一代祖)</span></span>
+      <div class="ac-wrap"><input type="text" id="s1" autocomplete="off" placeholder="ひらがな or 漢字"></div></label>
+    <label class="fld"><span class="lb">母の父　<span class="en">(二代祖)</span></span>
+      <div class="ac-wrap"><input type="text" id="s2" autocomplete="off"></div></label>
+    <label class="fld"><span class="lb">母の母の父　<span class="en">(三代祖・任意)</span></span>
+      <div class="ac-wrap"><input type="text" id="s3" autocomplete="off"></div></label>
+    <label class="fld"><span class="lb">母の母の母の父　<span class="en">(四代祖・任意)</span></span>
+      <div class="ac-wrap"><input type="text" id="s4" autocomplete="off"></div></label>
+    <button class="btn" onclick="calcAll()">種雄牛と比較する</button>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <h2>② 結果（近交係数の低い順）</h2>
+    <div class="legend">
+      <span class="r-safe">🟢 6.25%未満</span>
+      <span class="r-warn">🟡 6.25〜12.5%</span>
+      <span class="r-danger">🔴 12.5%以上</span>
+    </div>
+    <div id="results"></div>
+  </div>
+
+  <div class="card">
+    <h2>③ 種雄牛の管理 <button class="btn sm sec" onclick="resetBulls()">初期に戻す</button></h2>
+    <div class="hint">比較する種雄牛です。使わないものは × で削除できます。</div>
+    <div id="bullChips"></div>
+    <button class="btn sec" onclick="openAddBull()">＋ 新しい種雄牛を追加</button>
+  </div>
+
+  <div class="status" id="syncStatus">接続中…</div>
+</div>
+
+<!-- 在籍牛選択 -->
+<div class="modal-bg" id="pickCowModal">
+  <div class="modal">
+    <button class="x" onclick="closeModal('pickCowModal')">×</button>
+    <h2>在籍牛から選ぶ</h2>
+    <input type="text" class="searchbar" id="cowSearch" placeholder="名前 or 耳標で検索" oninput="renderCowList()">
+    <div class="picklist" id="cowList"></div>
+  </div>
+</div>
+
+<!-- 種雄牛追加 -->
+<div class="modal-bg" id="addBullModal">
+  <div class="modal">
+    <button class="x" onclick="closeModal('addBullModal')">×</button>
+    <h2>新しい種雄牛を追加</h2>
+    <p class="small">種雄牛の名前と4代祖の血統を入力。追加すると次回から自動で使えます（クラウド保存）。</p>
+    <label class="fld"><span class="lb">種雄牛の名号（漢字）</span><input type="text" id="nb-name" placeholder="例：新重川"></label>
+    <label class="fld"><span class="lb">読み（ひらがな）</span><input type="text" id="nb-yomi" placeholder="例：しんしげかわ"></label>
+    <div class="small" style="margin:6px 0;font-weight:700;color:var(--akane-d);">この種雄牛の血統（4代祖）— 読みで入力すると候補が出ます</div>
+    <div class="pair">
+      <label class="fld"><span class="lb">父（読み）</span><div class="ac-wrap"><input type="text" id="nb-s1" autocomplete="off"></div></label>
+      <label class="fld"><span class="lb">父（漢字）</span><input type="text" id="nb-s1n"></label>
+      <label class="fld"><span class="lb">母の父（読み）</span><div class="ac-wrap"><input type="text" id="nb-s2" autocomplete="off"></div></label>
+      <label class="fld"><span class="lb">母の父（漢字）</span><input type="text" id="nb-s2n"></label>
+      <label class="fld"><span class="lb">母の母の父（読み）</span><div class="ac-wrap"><input type="text" id="nb-s3" autocomplete="off"></div></label>
+      <label class="fld"><span class="lb">母の母の父（漢字）</span><input type="text" id="nb-s3n"></label>
+      <label class="fld"><span class="lb">母の母の母の父（読み）</span><div class="ac-wrap"><input type="text" id="nb-s4" autocomplete="off"></div></label>
+      <label class="fld"><span class="lb">母の母の母の父（漢字）</span><input type="text" id="nb-s4n"></label>
+    </div>
+    <label class="fld"><span class="lb">この牛自身の近交係数（％・わかれば）</span><input type="text" id="nb-f" placeholder="不明なら空欄（0扱い）"></label>
+    <button class="btn" onclick="saveNewBull()">追加して保存</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== あか牛 近交係数 計算エンジン（エクセル完全再現）=====
+// 多段日本語照合 + マスタ近似LOOKUP + 数式評価
+
+const GROUPS=['あぁ','いぃ','うぅゔ','えぇ','おぉ','かが','きぎ','くぐ','けげ','こご',
+'さざ','しじ','すず','せぜ','そぞ','ただ','ちぢ','つっづ','てで','とど',
+'な','に','ぬ','ね','の','はばぱ','ひびぴ','ふぶぷ','へべぺ','ほぼぽ',
+'ま','み','む','め','も','やゃ','ゆゅ','よょ','ら','り','る','れ','ろ',
+'わゎ','ゐ','ゑ','を','ん','ー','ｰ'];
+const PRIM={}, SEC={};
+GROUPS.forEach((g,r)=>{ for(const ch of g){ PRIM[ch]=r;
+  if('がぎぐげござじずぜぞだぢづでどばびぶべぼゔ'.includes(ch))SEC[ch]=1;
+  else if('ぱぴぷぺぽ'.includes(ch))SEC[ch]=2;
+  else if('ぁぃぅぇぉっゃゅょゎ'.includes(ch))SEC[ch]=3;
+  else SEC[ch]=0; }});
+function digitVal(ch){
+  const cp=ch.codePointAt(0);
+  if(cp>=0x30&&cp<=0x39) return cp-0x30;        // 半角0-9
+  if(cp>=0xFF10&&cp<=0xFF19) return cp-0xFF10;   // 全角０-９
+  return null;
+}
+function charKey(ch){
+  if(ch in PRIM) return [3,PRIM[ch],SEC[ch],ch.codePointAt(0)];
+  const d=digitVal(ch);
+  if(d!==null) return [1,d,0,0];
+  if(/[a-zA-Zａ-ｚＡ-Ｚ]/.test(ch)){
+    // 全角英字も半角化して扱う
+    let cp=ch.codePointAt(0);
+    if(cp>=0xFF21&&cp<=0xFF3A)cp=cp-0xFF21+0x41;
+    else if(cp>=0xFF41&&cp<=0xFF5A)cp=cp-0xFF41+0x61;
+    const lower=String.fromCodePoint(cp).toLowerCase().codePointAt(0);
+    return [2,lower,0,cp];
+  }
+  return [4,ch.codePointAt(0),0,0];
+}
+function sortKey(s){
+  s=String(s); const L01=[],L2=[],L3=[];
+  for(const ch of s){ const [c0,c1,c2,c3]=charKey(ch); L01.push([c0,c1]); L2.push(c2); L3.push(c3); }
+  return [L01,L2,L3,s.length];
+}
+// 多段キー比較 (-1,0,1)
+function cmpArr(a,b){
+  const n=Math.min(a.length,b.length);
+  for(let i=0;i<n;i++){ const x=a[i],y=b[i];
+    if(Array.isArray(x)){ const c=cmpArr(x,y); if(c)return c; }
+    else { if(x<y)return -1; if(x>y)return 1; } }
+  return a.length-b.length<0?-1:(a.length-b.length>0?1:0);
+}
+function cmpKey(k1,k2){
+  for(let i=0;i<4;i++){ const c=cmpArr(k1[i]===undefined?[]:(Array.isArray(k1[i])?k1[i]:[k1[i]]), k2[i]===undefined?[]:(Array.isArray(k2[i])?k2[i]:[k2[i]])); if(c)return c; }
+  return 0;
+}
+
+class KoubaiEngine {
+  constructor(masterCols, calc){
+    this.mc=masterCols; this.formulas=calc.formulas; this.consts=calc.consts;
+    // マスタ照合順ソート済みキー（stored順）
+    const A=masterCols['A']; this.sortedKeys=[]; this.sortedIdx=[];
+    const pairs=[];
+    for(let i=0;i<A.length;i++){ const a=A[i]; if(a===null||a===''||a==='-')continue; pairs.push([sortKey(a),i]); }
+    // stored順を保持（既にソート済みのはずだが照合順で安定ソート）
+    this.sortedKeys=pairs.map(p=>p[0]); this.sortedIdx=pairs.map(p=>p[1]);
+  }
+  lookup(key, col){
+    if(key===null||key===undefined||key==='') return null;
+    const R=this.mc[col]; const kk=sortKey(key);
+    // 照合順で kk 以下の最大位置（bisect_right-1）
+    let lo=0, hi=this.sortedKeys.length;
+    while(lo<hi){ const mid=(lo+hi)>>1; if(cmpKey(this.sortedKeys[mid],kk)<=0) lo=mid+1; else hi=mid; }
+    const pos=lo-1; if(pos<0)return null; return R[this.sortedIdx[pos]];
+  }
+  compute(s1,s2,s3,s4,bullYomi){
+    this.cache={}; this.stack=new Set();
+    this.inputs={'C2':s1,'C3':s2,'C4':s3,'C5':s4,'B7':bullYomi};
+    const v=this.get('E57');
+    return (typeof v==='number')?v:0;
+  }
+  get(addr){
+    if(addr in this.inputs) return this.inputs[addr];
+    if(addr in this.cache) return this.cache[addr];
+    if(this.stack.has(addr)) return null;
+    if(addr in this.consts){ this.cache[addr]=this.consts[addr]; return this.consts[addr]; }
+    if(addr in this.formulas){ this.stack.add(addr); const v=this.evalF(this.formulas[addr]); this.stack.delete(addr); this.cache[addr]=v; return v; }
+    return null;
+  }
+  evalF(f){ return this.parse(f.startsWith('=')?f.slice(1):f); }
+  splitArgs(s){ const args=[]; let depth=0,cur=''; for(const ch of s){ if(ch==='(')depth++,cur+=ch; else if(ch===')')depth--,cur+=ch; else if(ch===','&&depth===0){args.push(cur);cur='';} else cur+=ch; } args.push(cur); return args; }
+  balanced(s){ let d=0; for(const ch of s){ if(ch==='(')d++; else if(ch===')')d--; if(d<0)return false; } return d===0; }
+  parse(e){
+    e=e.trim(); if(e==='')return null;
+    if(e.startsWith('"')&&e.endsWith('"')&&(e.match(/"/g)||[]).length===2) return e.slice(1,-1);
+    let r=this.topOp(e,['<=','>=','<>','=','<','>']); if(r!==undefined)return r;
+    r=this.topOp(e,['+','-']); if(r!==undefined)return r;
+    r=this.topOp(e,['*','/']); if(r!==undefined)return r;
+    let m=e.match(/^([A-Z]+)\((.*)\)$/s);
+    if(m&&this.balanced(m[2])) return this.call(m[1], this.splitArgs(m[2]));
+    if(e.startsWith('(')&&e.endsWith(')')&&this.balanced(e.slice(1,-1))) return this.parse(e.slice(1,-1));
+    if(/^-?\d+(\.\d+)?$/.test(e)) return parseFloat(e);
+    m=e.match(/^\$?([A-Z]+)\$?(\d+)$/); if(m) return this.get(m[1]+m[2]);
+    return e;
+  }
+  topOp(e,ops){
+    let depth=0,instr=false;
+    for(let i=0;i<e.length;i++){ const ch=e[i];
+      if(ch==='"')instr=!instr;
+      else if(!instr){ if(ch==='(')depth++; else if(ch===')')depth--;
+        else if(depth===0){ for(const op of ops){ if(e.substr(i,op.length)===op){
+          if(op==='-'&&(i===0||'(+-*/<>=,'.includes(e[i-1])))continue;
+          const L=e.slice(0,i),Rt=e.slice(i+op.length);
+          return this.apply(op,this.parse(L),this.parse(Rt)); } } } } }
+    return undefined;
+  }
+  num(x){ if(x===null||x===''||x===undefined)return 0; if(typeof x==='number')return x; const n=parseFloat(x); return isNaN(n)?x:n; }
+  apply(op,a,b){
+    if(op==='=')return a===b; if(op==='<>')return a!==b;
+    if(['<','>','<=','>='].includes(op)){ const x=this.num(a),y=this.num(b);
+      if(op==='<')return x<y; if(op==='>')return x>y; if(op==='<=')return x<=y; return x>=y; }
+    const x=this.num(a),y=this.num(b);
+    if(op==='+')return x+y; if(op==='-')return x-y; if(op==='*')return x*y; if(op==='/')return y!==0?x/y:0;
+  }
+  truthy(v){ return !(v===null||v===''||v===false||v===0||v===undefined); }
+  colIdx(l){ let idx=0; for(const ch of l)idx=idx*26+(ch.charCodeAt(0)-64); return idx; }
+  colName(idx){ let s=''; while(idx>0){ const r=(idx-1)%26; s=String.fromCharCode(65+r)+s; idx=Math.floor((idx-1)/26); } return s; }
+  cellsInRange(rng){ rng=rng.trim(); let m=rng.match(/^\$?([A-Z]+)\$?(\d+):\$?([A-Z]+)\$?(\d+)$/);
+    if(!m){ const m2=rng.match(/^\$?([A-Z]+)\$?(\d+)$/); return m2?[m2[1]+m2[2]]:[]; }
+    const c1=this.colIdx(m[1]),r1=+m[2],c2=this.colIdx(m[3]),r2=+m[4]; const out=[];
+    for(let c=Math.min(c1,c2);c<=Math.max(c1,c2);c++) for(let r=Math.min(r1,r2);r<=Math.max(r1,r2);r++) out.push(this.colName(c)+r);
+    return out; }
+  masterColOf(rng){ let m=rng.match(/\$?([A-Z]+)\$?\d+:/); if(m)return m[1]; m=rng.match(/!\$?([A-Z]+)/); return m?m[1]:'B'; }
+  call(fn,args){
+    if(fn==='IF'){ return this.truthy(this.parse(args[0]))?this.parse(args[1]):(args.length>2?this.parse(args[2]):false); }
+    if(fn==='AND') return args.every(a=>this.truthy(this.parse(a)));
+    if(fn==='OR') return args.some(a=>this.truthy(this.parse(a)));
+    if(fn==='ISNUMBER'){ const v=this.parse(args[0]); return typeof v==='number'; }
+    if(fn==='LOOKUP'){ const key=this.parse(args[0]); const rr=(args.length>2?args[2]:args[1]).trim(); return this.lookup(key,this.masterColOf(rr)); }
+    if(fn==='ROW')return 1;
+    if(fn==='SUM'){ let t=0; for(const a of args) for(const ad of this.cellsInRange(a.trim())){ const v=this.get(ad); if(typeof v==='number')t+=v; } return t; }
+    if(fn==='SUMIF'){ const rng=this.cellsInRange(args[0].trim()); const crit=this.parse(args[1]); const sr=args.length>2?this.cellsInRange(args[2].trim()):rng; let t=0;
+      for(let i=0;i<rng.length;i++){ if(this.get(rng[i])===crit){ const sv=this.get(sr[i]); if(typeof sv==='number')t+=sv; } } return t; }
+    if(fn==='COUNTIF'){ const rng=this.cellsInRange(args[0].trim()); const crit=this.parse(args[1]); let c=0; for(const a of rng){ const v=this.get(a); if(v===crit&&crit!==null&&crit!=='')c++; } return c; }
+    if(fn==='MATCH'){ const key=this.parse(args[0]); const rng=this.cellsInRange(args[1].trim()); for(let i=0;i<rng.length;i++) if(this.get(rng[i])===key)return i+1; return null; }
+    if(fn==='RANK'){ const val=this.parse(args[0]); const rng=this.cellsInRange(args[1].trim()); const order=args.length>2?this.parse(args[2]):0;
+      let nums=rng.map(a=>this.get(a)).filter(n=>typeof n==='number'); if(typeof val!=='number')return null;
+      if(!order)return nums.filter(n=>n>val).length+1; else return nums.filter(n=>n<val).length+1; }
+    if(fn==='OFFSET'){ const m=args[0].trim().match(/^\$?([A-Z]+)\$?(\d+)$/); const rows=this.parse(args[1]); const cols=args.length>2?this.parse(args[2]):0;
+      const c=this.colIdx(m[1])+(+cols||0), r=+m[2]+(+rows||0); return this.get(this.colName(c)+r); }
+    return null;
+  }
+}
+// (inlined)
+
+const EMBED = {"mc":{"A":["あきさくら","あきみつしげ","いずみまるET","きくつるETI","きくみつ2ET","きくみつET","きくみつうら","きくみつまる","きくゆき","しげおす","しげかわ6の4","しげかわさかえ","しげきた","しげくま","しげたま","しげつる","しげとし","しげなみ","しげなみいずみ","しげふく","しげまるかわ","しげみつたま","だい10しげかわ","だい10みつまる","だい11みつしげ","だい13しげかわ","だい14みつしげ","だい16みつしげ","だい18みつしげ","だい1しげかわ","だい1みつはな","だい1みつはる","だい22みつしげ","だい2しげなみ","だい2つるみつ","だい2なみまる","だい2みつしげ","だい2みつはる","だい2みつふく","だい2みつまる","だい3みつしげ","だい3みつまる","だい4えいほう","だい4しげなみ","だい4つるみつ","だい4みつしげ","だい5たまなみ","だい5なみまる","だい6たまなみ","だい6はるたまET","だい7なみまる","だい9えいほう","たかはな","たかみつしげ","たけさかえ","たけみつまる","たつあき","たまえいほう","たまおす","たまきみETI2","たまさつき","たまつき","たまなみ","たまなみしげ","たまなみしげに","たまなみひめ","たまみつしげETI","つるくま","つるしげ","つるたま","つるみつうら","つるみつしげ","つるみつはる","つるゆき","としいずみ","とみしげ","とよいずみET","なみいずみ","なみなかしま","なみなかしまETI","なみふく","なみまる","なみまるET","なみみつ","なみみつとみ","なみゆたか","はるあや","はるさつき","はるしげ","はるひさ","はるひめ","はるふくET","はるみつ","はるみつさかえ","はるやまさかえ","はるやましげ","はるやまと","ひさみつしげ","ひめみつしげ","ふくえいほう","ふくみつしげ","ふじたま","みつさかえ","みつしげET","みつしげくま","みつしげくま7","みつしげくまご","みつしげくまなな","みつしげくまに","みつしげくまろく","みつしげぼし","みつたから","みつたけ","みつたましげET","みつたまなみ","みつとし","みつなが","みつはるET","みつはるしげ","みつゆう","みつよしET","ゆうせん","ゆきいずみ","ー"],"B":["秋桜","秋光重","泉丸ET","菊鶴ETI","菊光二ET","菊光ET","菊光浦","菊光丸","菊幸","重雄","重川6の4","重川栄","重北","重球磨","重玉","重鶴","重利","重波","重波泉","重福","重丸川","重光玉","第十重川","第十光丸","第十一光重","第十三重川","第十四光重","第十六光重","第十八光重","第一重川","第一光花","第一光晴","第二十二光重","第二重波","第二弦光","第二波丸","第二光重","第二光晴","第二光福","第二光丸","第三光重","第三光丸","第四栄豊","第四重波","第四弦光","第四光重","第五玉波","第五波丸","第六玉波","第六春玉ET","第七波丸","第九栄豊","高花","隆光重","武栄","武光丸","竜明","玉栄豊","玉雄","玉君ETI2","球五月","球月","玉波","玉波重","玉波重二","玉波姫","球光重ETI","鶴球磨","鶴重","弦球","鶴光浦","鶴光重","弦光晴","弦幸","寿泉","富重","豊泉ET","波泉","波中島","波中島ETI","波福","波丸","波丸ET","波光","波光豊","波豊","春綾","春五月","春重","春久","春姫","春福ET","春光","春光栄","春山栄","春山重","春山都","久光重","姫光重","福栄豊","福光重","藤玉","光栄","光重ET","光重球磨","光重球磨七","光重球磨五","光重球磨七","光重球磨二","光重球磨六","光重星","光宝","光武","光玉重ET","光玉波","光利","光長","光春ET","光晴重","光優","光義ET","優泉","幸泉","ー"],"C":[6.85,null,0,13.8,null,null,7.5,4.3,10.3,null,8.7,null,null,null,null,null,null,null,29.5,null,null,2.2,null,0,7.8,null,7.4,9.4,4.9,null,null,11,2.8,1.8,9,null,7,null,null,null,15.3,1.6,6.3,null,5.9,7.4,18.8,null,null,7.2,null,null,null,9.5,null,13,null,null,8.4,null,null,null,12.5,6.6,null,null,6.3,8.5,4.1,6.1,6.5,6.5,10.9,8.7,9.9,3.7,5.5,2.2,3.7,null,null,6.5,null,null,7,null,4.1,4.5,null,null,null,null,null,0,6,null,6.5,5.2,4.6,3.4,null,null,null,1.8,null,null,7.5,8.1,null,9.2,6.5,null,null,3.9,0,3.5,null,null,12.8,null,null,null,9.6,null],"D":["つるみつしげ","だい16みつしげ","だい3みつまる","きくみつまる","だい3みつまる","だい3みつまる","きくみつまる","だい3みつまる","きくつるETI","だい6しげたから","だい6たまなみ","だい28しげかわ","だい1しげかわ","しげつね","しげゆき","みつしげかわ","しげまる","しげみや","なみいずみ","ふくはな","だい3しげかわ","みつたまなみ","だい2しげかわ","だい2みつまる","みつしげET","だい1しげかわ","みつしげET","みつしげET","みつしげET","だい2しげかわ","みつはな","みつはるしげ","みつしげET","しげなみ","だい4みつしげ","なみまる","みつしげET","みつはるしげ","みつたけ","みつたけ","みつしげET","みつたけ","だい3えいほう","だい2しげなみ","だい4みつしげ","みつしげET","たまなみ","なみまる","だい13しげかわ","はるたま","なみまる","だい4えいほう","たかいち","だい16みつしげ","みつさかえ","だい3みつまる","たつさかえ","だい4えいほう","たまなみ","みつたまなみ","みつしげくま","だい5たまつき","しげなみ","だい5たまなみ","だい5たまなみ","だい5たまなみ","だい16みつしげ","つるみつしげ","つるみつしげ","だい4つるみつ","きくみつうら","だい3みつしげ","だい2つるみつ","だい4つるみつ","だい14みつしげ","だい16みつしげ","なみいずみ","みつたまなみ","なみまる","なみなかしま","なみまる","だい2しげなみ","なみまる","だい3みつまる","なみとみ","なみまる","はるやまと","はるやまと","はるしげ1だい","だい5はるたま","だい5はるたま","だい3みつまる","はなみね","はるやまと","はるやまと","はるやまと","だい6はるたまET","だい16みつしげ","だい16みつしげ","たまえいほう","だい16みつしげ","しげふじ","みつしげかわ","だい2みつまる","しげくま","みつしげくま","みつしげくま","みつしげくま","みつしげくま","みつしげくま","だい3みつしげ","だい8みつたけ","みつゆう","みつたまなみ","だい5たまなみ","だい10みつまる","だい10みつまる","だい3みつまる","だい16みつしげ","だい5みつうら","みつしげかわ","だい2みついずみ","なみいずみ","ー"],"E":["鶴光重","第十六光重","第三光丸","菊光丸","第三光丸","第三光丸","菊光丸","第三光丸","菊鶴ETI","第六重宝","第六玉波","第二十八重川","第一重川","重常","重幸","光重川","重丸","重宮","波泉","福花","第三重川","光玉波","第二重川","第二光丸","光重ET","第一重川","光重ET","光重ET","光重ET","第二重川","光花","光晴重","光重ET ","重波","第四光重","波丸","光重ET","光晴重","光武","光武","光重ET","光武","第三栄豊","第二重波","第四光重","光重ET","玉波","波丸","第十三重川","春玉","波丸","第四栄豊","高一","第十六光重","光栄","第三光丸","竜栄","第四栄豊","玉波","光玉波","光重球磨","第五球月","重波","第五玉波","第五玉波","第五玉波","第十六光重","鶴光重","鶴光重","第四弦光","菊光浦","第三光重","第二弦光","第四弦光","第十四光重","第十六光重","波泉","光玉波","波丸","波中島","波丸","第二重波","波丸","第三光丸","波豊","波丸","春山都","春山都",null,"第五春玉","第五春玉","第三光丸","花峯","春山都","春山都","春山都","第六春玉ET","第十六光重","第十六光重","玉栄豊","第十六光重","重藤","光重川","第二光丸","重球磨","光重球磨","光重球磨","光重球磨","光重球磨","光重球磨","第三光重","第八光武","光優","光玉波","第五玉波","第十光丸","第十光丸","第三光丸","第十六光重","第五光浦","光重川","第二光泉","波泉","ー"],"F":["ひさみつしげ","みつたまなみ","だい2みついずみ","だい16みつしげ","しげみつ","しげみつ","だい14みつしげ","しげみつET","つるゆき","だい1しげかわ","だい4えいほう","だい3みつまる","しげたま","しげとみ","まんたま　","だい10しげかわ","ひさまる","しげたま","なみいずみ","はまじ","だい2みつまる","しげみつET","しげたから","だい5しげかわ","みつたけ","そさかえ","なみまる","だい10しげかわ","だい3みつまる","しげたま","だい2しげかわ","なみいずみ","だい5たまなみ","なかほり","だい3みつまる","たけみつ","だい10しげかわ","みつしげくま","ふくたつ","しげふく","だい2みつまる","たまさかえ","しげまる","だい4えいほう","だい2しげなみ","なみまる","しげたま","だい2みつまる","たまなみ","しげまる","だい10しげかわ","みつはな","まるひさ","みつたまなみ","みつたけ","みつたけ","しろだい","たまなみ","しげたから","だい3みつまる","しろいわ","まつぼう","しげたま","だい16みつしげ","だい16みつしげ","なみまる","みつしげくま","みつしげくま","だい3みつまる","みつしげくま","つるみつしげ","だい2しげみつ","だい３みつしげ","だい16みつしげ","いずみまるET","だい3みつまる","たまさかえゆたか","みつしげET","みつまる","なみいずみ","しげなみ","しげほう","だい3しげかわ","なみまる","だい16みつしげ","だい4えいほう","だい16みつしげ","だい16みつしげ","はるしげ2だい","だい10しげかわ","みつたけ","だい3たまいずみ","たまふく","だい16みつしげ","だい16みつしげ","だい16みつしげ","くろしげかわ","だい3みつまる","だい3みつまる","だい16みつしげ","みつしげET","だいいちしげかわ","ふくたつ","だい10しげかわ","みつしげET","だい16みつしげ","だい16みつしげ","だい16みつしげ","だい4みつしげ","だい16みつしげ","ぎんぼし","だい10しげかわ","しげとし","だい16みつしげ","だい2みついずみ","だい2しげみつ","だい10しげかわ","だい2みつまる","だい３みつしげ","ひさみどり","だい3しげかわ","そしょく","だい14みつしげ","ー"],"G":["久光重","光玉波","第二光泉","第十六光重","重光","重光","第十四光重","重光ET","弦幸","第一重川","第四栄豊","第三光丸","重玉","重富","万玉","第十重川","久丸","重玉","波泉","浜二","第二光丸","重光ET","重宝","第五重川","光武","蘇栄","波丸","第十重川","第三光丸","重玉","第二重川","波泉","第五玉波","中堀","第三光丸","武光","第十重川","光重球磨","福竜","重福","第二光丸","玉栄","重丸","第四栄豊","第二重波","波丸","重玉","第二光丸","玉波","重丸","第十重川","光花","丸久","光玉重","光武","光武","城代","玉波","重宝","第三光丸","白岩","松房","重玉","第十六光重","第十六光重","波丸","光重球磨","光重球磨","第三光丸","光重球磨","鶴光重","第二重光","第三光重","第十六光重","泉丸ET","第三光丸","玉栄豊","光重ET","光丸","波泉","重波","重宝","第三重川","波丸","第十六光重","第四栄豊","第十六光重","第十六光重",null,"第十重川","光武","第三球泉","珠福","第十六光重","第十六光重","第十六光重","黒重川","第三光丸","第三光丸","第十六光重","光重ET","第一重川","福竜","第十重川","光重ET","第十六光重","第十六光重","第十六光重","第四光重","第十六光重","銀星","第十重川","重利","第十六光重","第二光泉","第二重光","第十重川","第二光丸","第三光重","久緑","第三重川","蘇殖","第十四光重","ー"],"H":["みつひめまる","だい10みつまる","だい10しげかわ","だい3みつまる","きんなみ","きんなみ","だい5たまなみ","なみまる","みつしげくま","みつとみ","はるたま","なみまる","だい3たまつか","だい1しげかわ","しげたま3だい","みつたけ","しげとしだい3","まるお","だい10みつまる","とよたま","だい15そしょく","ふくたつ","そみなみ","ひさはた","だい2みついずみ","つるさかえ","だい10しげかわ","はらみ","ふくたつ","はるとみ","みつしげ","だい10みつまる","しろいわ","そまる","だい10しげかわ","くすとみ","くすきん","だい10みつまる","だい2しげとし","たつあき","だい3しげかわ","ふくよう","しげたま","だい2えいほう","だい3みつまる","だい10しげかわ","しげたま","みついずみ","しげなみ","だい3いずみ","そたま","だい2しげかわ","みつなみ","みつしげET","だい3しげかわ","たつさかえ","はる","だい4さかえ","おすさかえ","なみみつ","はらみ","そつき","はるとみ","なみまる","なみまる","しげしげなみ","くろしげかわ","だい16みつしげ","なみまる","だい16みつしげ","なみとよ","しげふく","なみまる","だい5たまなみ","だい16みつしげ","なみまる","だい5はるたま","しげつる","そたま","だい16みつしげ","はつまる","しげたま","しげふく","だい2みつまる","だい10みつまる","だい4さかえ","だい4みつしげ","だい10みつまる","はるしげ3だい","しろいわ","たつさかえ","そたつ","はるみつだい3","みつなが","なみまる","みつたまなみ","しげなみ1","きくしげかわ","なみまる","だい3みつまる","なみまる","しげたま","だい4さかえ","だい2しげかわ","だい3たまいずみ","みつたまなみ","だい10みつまる","みつたまなみ","なみまる","みつしげET","たけみつ","はつたから","たかはな","なみまる","なかほり","かねふく","そつき","しげさかえ","なみまる","なかとみ","くさみなみ","たまみつ","だい10しげかわ","ー"],"I":["光姫丸","第十光丸","第十重川","第三光丸","金波","金波","第五玉波","波丸","光重球磨","光富","春玉","波丸","第三玉塚","第一重川",null,"光武",null,"丸雄","第十光丸","豊玉","第十五蘇殖","福竜","蘇南","久旗","第二光泉","鶴栄","第十重川","原美","福竜","春富","光重","第十光丸","白岩","蘇丸","第十重川","楠富","楠金","第十光丸","第二重利","竜明","第三重川","福陽","重玉","第二栄豊","第三光丸","第十重川","重玉","光泉","重波","第三泉","蘇玉","第二重川","光波","光重ET","第三重川","竜栄","春","第四栄","雄栄","波光","原美","蘇月","春富","波丸","波丸","重重波","黒重川","第十六光重","波丸","第十六光重","波豊","重福","波丸","第五玉波","第十六光重","波丸","第五春玉","重鶴","蘇玉","第十六光重","初丸","重玉","重福","第二光丸","第十光丸","第四栄","第四光重","第十光丸",null,"白岩","竜栄","蘇竜",null,"光長","波丸","光玉波","重波1","菊重川","波丸","第三光丸","波丸","重玉","第四栄","第二重川","第三球泉","光玉波","第十光丸","光玉波","波丸","光重ET","武光","初宝","高花","波丸","中堀","金福","蘇月","重栄","波丸","中富","草南","球光","第十重川","ー"],"J":["だい4みつしげ","ふくたつ","しげさかえ","なみまる","こうふく","ゆきふく","しろいわ","そつき","だい3みつまる","しげたま","だい2しげかわ","しげなみ","たまみ","だい2しげかわ","しげたま4だい","さかえみつ","しげとしだい4","みつさん","みつしげET","しげふくだい4","そたつ","そしげ","しげひさ","うらつき","だい10しげかわ","やまみつ","みつたけ","やなぎ","しげふく","たまはる","はまふじ","みつしげET","はらみ","おすさかえ","みつたけ","だい2くすかぜ","たつぼし","なみまる","しげほう","はるみつ","そしげ","ふくまる","しげたま","しげたま","だい3みつまる","みつたけ","まるひさ","そこう","しげほう","だい2きんさかえ","しげたか","しげほう","たかはなだい4","だい３みつまる","しげふく","だい3ふくさかえ","ひさはま","しげたま","はつなみ","だい3みつまる","やなぎ","あきはま","たまはる","だい3みつまる","だい3みつまる","だい6しげほう","はぎたまなみ","だい10みつまる","だい3しげかわ","だい10みつまる","だい10しげかわ","えきはま","だい10みつまる","しげなみ","なみまる","そたつ","だい３みつまる","たつはな","だい５みつうら","なみとよ","とよにしき","はらふく","ふくはな","だい2しげかわ","なみまる","しげかわ","みつしげET","なみまる","はるしげ4だい","ゆきふく","だい3ふくさかえ","しげふさ","はるみつだい4","みつしげかわ","だい3しげなみ","みつしげET","だい6みつたけ","だい2みついずみ","だい28しげかわ","なみまる","そつき","にしき","きくはま","しげほう","そしょく","みつしげET","だい５たまなみ","みつしげET","しげかわET","だい2はつたま","しげふく","そまる","はつさくら","だい10みつまる","そまる","ふくはな","くさみなみ","のぶはる","だい10みつまる","みつゆうだい4","くさまる","まつはま","みつたけ","ー"],"K":["第四光重","福竜","重栄","波丸","幸福","幸福","白岩","蘇月","第三光丸","重玉","第二重川","重波","珠美","第二重川",null,"栄光",null,"光産","光重ET",null,"蘇竜","蘇重","重久","浦月","第十重川","山光","光武","柳","重福","珠春","浜藤","光重ET","原美","雄栄","光丸","第二楠風","竜星","波丸","重宝","春光","蘇重","福丸","重宝","重玉","第三光丸","光武","丸久","蘇幸","重宝","第二金栄","重高","重宝",null,"第三光丸","重福","第三福栄","久浜","重玉","初波","第三光丸","柳","昭浜","珠春","第三光丸","第三光丸","第六重宝","萩玉波","第十光丸","第三重川","第十光丸","第十重川","益浜","第十光丸","重波","波丸","蘇竜","第三光丸","竜花","第五光浦","波豊","豊錦","原福","福花","第二重川","波丸","重川","光重ET","波丸",null,"幸福","第三福栄","重房",null,"光重川","第三重波","光重ET","第六光武","第二光泉","第二十八重川","波丸","蘇月","錦","菊浜","重宝","蘇殖","光重ET","第五玉波","光重ET","重川ET","第二初玉","重福","蘇丸","初桜","第十光丸","蘇丸","福花","草南","信春","第十光丸",null,"草丸","松浜","光武","ー"]},"formulas":{"C1":"=IF(D1=1,1,1+(D1-1)/57)","D1":"=ROW()","E2":"=LOOKUP(C2,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$B$7:$B$2266)","AE2":"=L7","AF2":"=COUNTIF(L45:AA45,AE2)","AG2":"=SUMIF(L45:AA45,AE2,L55:AA55)","AH2":"=AG2*100000+16-AD2","AI2":"=RANK(AH2,AH2:AH55)","AJ2":"=IF(AI2=1,1,IF(AI2=2,2,IF(AI2=3,3,\"\")))","E3":"=LOOKUP(C3,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$B$7:$B$2266)","G3":"=B16","I3":"=E2","AE3":"=IF(L7=M7,\"\",M7)","AF3":"=COUNTIF(L45:AA45,AE3)","AG3":"=SUMIF(L45:AA45,AE3,L55:AA55)","AH3":"=AG3*100000+16-AD3","AI3":"=RANK(AH3,AH2:AH55)","AJ3":"=IF(AI3=1,1,IF(AI3=2,2,IF(AI3=3,3,\"\")))","E4":"=LOOKUP(C4,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$B$7:$B$2266)","I4":"=E3","AE4":"=IF(OR(L7=N7,M7=N7),\"\",N7)","AF4":"=COUNTIF(L45:AA45,AE4)","AG4":"=SUMIF(L45:AA45,AE4,L55:AA55)","AH4":"=AG4*100000+16-AD4","AI4":"=RANK(AH4,AH2:AH55)","AJ4":"=IF(AI4=1,1,IF(AI4=2,2,IF(AI4=3,3,\"\")))","E5":"=LOOKUP(C5,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$B$7:$B$2266)","AE5":"=IF(OR(L7=O7,M7=O7),\"\",IF(N7=O7,\"\",O7))","AF5":"=COUNTIF(L45:AA45,AE5)","AG5":"=SUMIF(L45:AA45,AE5,L55:AA55)","AH5":"=AG5*100000+16-AD5","AI5":"=RANK(AH5,AH2:AH55)","AJ5":"=IF(AI5=1,1,IF(AI5=2,2,IF(AI5=3,3,\"\")))","G6":"=E57","I6":"=G57","AE6":"=IF(OR(L7=P7,M7=P7),\"\",IF(OR(N7=P7,O7=P7),\"\",P7))","AF6":"=COUNTIF(L45:AA45,AE6)","AG6":"=SUMIF(L45:AA45,AE6,L55:AA55)","AH6":"=AG6*100000+16-AD6","AI6":"=RANK(AH6,AH2:AH55)","AJ6":"=IF(AI6=1,1,IF(AI6=2,2,IF(AI6=3,3,\"\")))","C7":"=LOOKUP(B7,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$L$7:$L$2266)","E7":"=LOOKUP(B7,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266)","L7":"=B17","M7":"=C13","N7":"=E10","O7":"=E18","P7":"=G10","Q7":"=G14","R7":"=G18","S7":"=G22","T7":"=I10","U7":"=I12","V7":"=I14","W7":"=I16","X7":"=I18","Y7":"=I20","Z7":"=I22","AA7":"=I24","AE7":"=IF(OR(L7=Q7,M7=Q7),\"\",IF(OR(N7=Q7,O7=Q7),\"\",IF(P7=Q7,\"\",Q7)))","AF7":"=COUNTIF(L45:AA45,AE7)","AG7":"=SUMIF(L45:AA45,AE7,L55:AA55)","AH7":"=AG7*100000+16-AD7","AI7":"=RANK(AH7,AH2:AH55)","AJ7":"=IF(AI7=1,1,IF(AI7=2,2,IF(AI7=3,3,\"\")))","AE8":"=IF(OR(L7=R7,M7=R7),\"\",IF(OR(N7=R7,O7=R7),\"\",IF(OR(P7=R7,Q7=R7),\"\",R7)))","AF8":"=COUNTIF(L45:AA45,AE8)","AG8":"=SUMIF(L45:AA45,AE8,L55:AA55)","AH8":"=AG8*100000+16-AD8","AI8":"=RANK(AH8,AH2:AH55)","AJ8":"=IF(AI8=1,1,IF(AI8=2,2,IF(AI8=3,3,\"\")))","E9":"=LOOKUP(C13,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","G9":"=LOOKUP(E10,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","I9":"=LOOKUP(G10,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","AE9":"=IF(OR(L7=S7,M7=S7),\"\",IF(OR(N7=S7,O7=S7),\"\",IF(OR(P7=S7,Q7=S7),\"\",IF(R7=S7,\"\",S7))))","AF9":"=COUNTIF(L45:AA45,AE9)","AG9":"=SUMIF(L45:AA45,AE9,L55:AA55)","AH9":"=AG9*100000+16-AD9","AI9":"=RANK(AH9,AH2:AH55)","AJ9":"=IF(AI9=1,1,IF(AI9=2,2,IF(AI9=3,3,\"\")))","E10":"=LOOKUP(C13,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","G10":"=LOOKUP(E10,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","I10":"=LOOKUP(G10,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","L10":"=IF(B17=C31,2,0)","M10":"=IF(C13=C31,3,0)","N10":"=IF(E10=C31,4,0)","O10":"=IF(E18=C31,4,0)","P10":"=IF(G10=C31,5,0)","Q10":"=IF(G14=C31,5,0)","R10":"=IF(G18=C31,5,0)","S10":"=IF(G22=C31,5,0)","T10":"=IF(I10=C31,6,0)","U10":"=IF(I12=C31,6,0)","V10":"=IF(I14=C31,6,0)","W10":"=IF(I16=C31,6,0)","X10":"=IF(I18=C31,6,0)","Y10":"=IF(I20=C31,6,0)","Z10":"=IF(I22=C31,6,0)","AA10":"=IF(I24=C31,6,0)","AE10":"=IF(OR(L7=T7,M7=T7),\"\",IF(OR(N7=T7,O7=T7),\"\",IF(OR(P7=T7,Q7=T7),\"\",IF(OR(R7=T7,S7=T7),\"\",T7))))","AF10":"=COUNTIF(L45:AA45,AE10)","AG10":"=SUMIF(L45:AA45,AE10,L55:AA55)","AH10":"=AG10*100000+16-AD10","AI10":"=RANK(AH10,AH2:AH55)","AJ10":"=IF(AI10=1,1,IF(AI10=2,2,IF(AI10=3,3,\"\")))","I11":"=LOOKUP(E10,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$G$7:$G$2266)","L11":"=IF(B17=E28,3,0)","M11":"=IF(C13=E28,4,0)","N11":"=IF(E10=E28,5,0)","O11":"=IF(E18=E28,5,0)","P11":"=IF(G10=E28,6,0)","Q11":"=IF(G14=E28,6,0)","R11":"=IF(G18=E28,6,0)","S11":"=IF(G22=E28,6,0)","T11":"=IF(I10=E28,7,0)","U11":"=IF(I12=E28,7,0)","V11":"=IF(I14=E28,7,0)","W11":"=IF(I16=E28,7,0)","X11":"=IF(I18=E28,7,0)","Y11":"=IF(I20=E28,7,0)","Z11":"=IF(I22=E28,7,0)","AA11":"=IF(I24=E28,7,0)","AE11":"=IF(OR(L7=U7,M7=U7),\"\",IF(OR(N7=U7,O7=U7),\"\",IF(OR(P7=U7,Q7=U7),\"\",IF(OR(R7=U7,S7=U7),\"\",IF(T7=U7,\"\",U7)))))","AF11":"=COUNTIF(L45:AA45,AE11)","AG11":"=SUMIF(L45:AA45,AE11,L55:AA55)","AH11":"=AG11*100000+16-AD11","AI11":"=RANK(AH11,AH2:AH55)","AJ11":"=IF(AI11=1,1,IF(AI11=2,2,IF(AI11=3,3,\"\")))","C12":"=LOOKUP(B17,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","I12":"=LOOKUP(E10,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$F$7:$F$2266)","L12":"=IF(B17=E36,3,0)","M12":"=IF(C13=E36,4,0)","N12":"=IF(E10=E36,5,0)","O12":"=IF(E18=E36,5,0)","P12":"=IF(G10=E36,6,0)","Q12":"=IF(G14=E36,6,0)","R12":"=IF(G18=E36,6,0)","S12":"=IF(G22=E36,6,0)","T12":"=IF(I10=E36,7,0)","U12":"=IF(I12=E36,7,0)","V12":"=IF(I14=E36,7,0)","W12":"=IF(I16=E36,7,0)","X12":"=IF(I18=E36,7,0)","Y12":"=IF(I20=E36,7,0)","Z12":"=IF(I22=E36,7,0)","AA12":"=IF(I24=E36,7,0)","AE12":"=IF(OR(L7=V7,M7=V7),\"\",IF(OR(N7=V7,O7=V7),\"\",IF(OR(P7=V7,Q7=V7),\"\",IF(OR(R7=V7,S7=V7),\"\",IF(OR(T7=V7,U7=V7),\"\",V7)))))","AF12":"=COUNTIF(L45:AA45,AE12)","AG12":"=SUMIF(L45:AA45,AE12,L55:AA55)","AH12":"=AG12*100000+16-AD12","AI12":"=RANK(AH12,AH2:AH55)","AJ12":"=IF(AI12=1,1,IF(AI12=2,2,IF(AI12=3,3,\"\")))","C13":"=LOOKUP(B17,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","G13":"=LOOKUP(C13,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$G$7:$G$2266)","I13":"=LOOKUP(G14,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","L13":"=IF(B17=G28,4,0)","M13":"=IF(C13=G28,5,0)","N13":"=IF(E10=G28,6,0)","O13":"=IF(E18=G28,6,0)","P13":"=IF(G10=G28,7,0)","Q13":"=IF(G14=G28,7,0)","R13":"=IF(G18=G28,7,0)","S13":"=IF(G22=G28,7,0)","T13":"=IF(I10=G28,8,0)","U13":"=IF(I12=G28,8,0)","V13":"=IF(I14=G28,8,0)","W13":"=IF(I16=G28,8,0)","X13":"=IF(I18=G28,8,0)","Y13":"=IF(I20=G28,8,0)","Z13":"=IF(I22=G28,8,0)","AA13":"=IF(I24=G28,8,0)","AE13":"=IF(OR(L7=W7,M7=W7),\"\",IF(OR(N7=W7,O7=W7),\"\",IF(OR(P7=W7,Q7=W7),\"\",IF(OR(R7=W7,S7=W7),\"\",IF(OR(T7=W7,U7=W7),\"\",IF(V7=W7,\"\",W7))))))","AF13":"=COUNTIF(L45:AA45,AE13)","AG13":"=SUMIF(L45:AA45,AE13,L55:AA55)","AH13":"=AG13*100000+16-AD13","AI13":"=RANK(AH13,AH2:AH55)","AJ13":"=IF(AI13=1,1,IF(AI13=2,2,IF(AI13=3,3,\"\")))","G14":"=LOOKUP(C13,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$F$7:$F$2266)","I14":"=LOOKUP(G14,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","L14":"=IF(B17=G32,4,0)","M14":"=IF(C13=G32,5,0)","N14":"=IF(E10=G32,6,0)","O14":"=IF(E18=G32,6,0)","P14":"=IF(G10=G32,7,0)","Q14":"=IF(G14=G32,7,0)","R14":"=IF(G18=G32,7,0)","S14":"=IF(G22=G32,7,0)","T14":"=IF(I10=G32,8,0)","U14":"=IF(I12=G32,8,0)","V14":"=IF(I14=G32,8,0)","W14":"=IF(I16=G32,8,0)","X14":"=IF(I18=G32,8,0)","Y14":"=IF(I20=G32,8,0)","Z14":"=IF(I22=G32,8,0)","AA14":"=IF(I24=G32,8,0)","AE14":"=IF(OR(L7=X7,M7=X7),\"\",IF(OR(N7=X7,O7=X7),\"\",IF(OR(P7=X7,Q7=X7),\"\",IF(OR(R7=X7,S7=X7),\"\",IF(OR(T7=X7,U7=X7),\"\",IF(OR(V7=X7,W7=X7),\"\",X7))))))","AF14":"=COUNTIF(L45:AA45,AE14)","AG14":"=SUMIF(L45:AA45,AE14,L55:AA55)","AH14":"=AG14*100000+16-AD14","AI14":"=RANK(AH14,AH2:AH55)","AJ14":"=IF(AI14=1,1,IF(AI14=2,2,IF(AI14=3,3,\"\")))","I15":"=LOOKUP(C13,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$I$7:$I$2266)","L15":"=IF(B17=G36,4,0)","M15":"=IF(C13=G36,5,0)","N15":"=IF(E10=G36,6,0)","O15":"=IF(E18=G36,6,0)","P15":"=IF(G10=G36,7,0)","Q15":"=IF(G14=G36,7,0)","R15":"=IF(G18=G36,7,0)","S15":"=IF(G22=G36,7,0)","T15":"=IF(I10=G36,8,0)","U15":"=IF(I12=G36,8,0)","V15":"=IF(I14=G36,8,0)","W15":"=IF(I16=G36,8,0)","X15":"=IF(I18=G36,8,0)","Y15":"=IF(I20=G36,8,0)","Z15":"=IF(I22=G36,8,0)","AA15":"=IF(I24=G36,8,0)","AE15":"=IF(OR(L7=Y7,M7=Y7),\"\",IF(OR(N7=Y7,O7=Y7),\"\",IF(OR(P7=Y7,Q7=Y7),\"\",IF(OR(R7=Y7,S7=Y7),\"\",IF(OR(T7=Y7,U7=Y7),\"\",IF(OR(V7=Y7,W7=Y7),\"\",IF(X7=Y7,\"\",Y7)))))))","AF15":"=COUNTIF(L45:AA45,AE15)","AG15":"=SUMIF(L45:AA45,AE15,L55:AA55)","AH15":"=AG15*100000+16-AD15","AI15":"=RANK(AH15,AH2:AH55)","AJ15":"=IF(AI15=1,1,IF(AI15=2,2,IF(AI15=3,3,\"\")))","B16":"=LOOKUP(B7,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$B$7:$B$2266)","I16":"=LOOKUP(C13,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$H$7:$H$2266)","L16":"=IF(B17=G40,4,0)","M16":"=IF(C13=G40,5,0)","N16":"=IF(E10=G40,6,0)","O16":"=IF(E18=G40,6,0)","P16":"=IF(G10=G40,7,0)","Q16":"=IF(G14=G40,7,0)","R16":"=IF(G18=G40,7,0)","S16":"=IF(G22=G40,7,0)","T16":"=IF(I10=G40,8,0)","U16":"=IF(I12=G40,8,0)","V16":"=IF(I14=G40,8,0)","W16":"=IF(I16=G40,8,0)","X16":"=IF(I18=G40,8,0)","Y16":"=IF(I20=G40,8,0)","Z16":"=IF(I22=G40,8,0)","AA16":"=IF(I24=G40,8,0)","AE16":"=IF(OR(L7=Z7,M7=Z7),\"\",IF(OR(N7=Z7,O7=Z7),\"\",IF(OR(P7=Z7,Q7=Z7),\"\",IF(OR(R7=Z7,S7=Z7),\"\",IF(OR(T7=Z7,U7=Z7),\"\",IF(OR(V7=Z7,W7=Z7),\"\",IF(OR(X7=Z7,Y7=Z7),\"\",Z7)))))))","AF16":"=COUNTIF(L45:AA45,AE16)","AG16":"=SUMIF(L45:AA45,AE16,L55:AA55)","AH16":"=AG16*100000+16-AD16","AI16":"=RANK(AH16,AH2:AH55)","AJ16":"=IF(AI16=1,1,IF(AI16=2,2,IF(AI16=3,3,\"\")))","B17":"=LOOKUP(B7,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266)","E17":"=LOOKUP(B17,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$G$7:$G$2266)","G17":"=LOOKUP(E18,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","I17":"=LOOKUP(G18,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","L17":"=IF(B17=I28,5,0)","M17":"=IF(C13=I28,6,0)","N17":"=IF(E10=I28,7,0)","O17":"=IF(E18=I28,7,0)","P17":"=IF(G10=I28,8,0)","Q17":"=IF(G14=I28,8,0)","R17":"=IF(G18=I28,8,0)","S17":"=IF(G22=I28,8,0)","T17":"=IF(I10=I28,9,0)","U17":"=IF(I12=I28,9,0)","V17":"=IF(I14=I28,9,0)","W17":"=IF(I16=I28,9,0)","X17":"=IF(I18=I28,9,0)","Y17":"=IF(I20=I28,9,0)","Z17":"=IF(I22=I28,9,0)","AA17":"=IF(I24=I28,9,0)","AE17":"=IF(OR(L7=AA7,M7=AA7),\"\",IF(OR(N7=AA7,O7=AA7),\"\",IF(OR(P7=AA7,Q7=AA7),\"\",IF(OR(R7=AA7,S7=AA7),\"\",IF(OR(T7=AA7,U7=AA7),\"\",IF(OR(V7=AA7,W7=AA7),\"\",IF(OR(X7=AA7,Y7=AA7),\"\",IF(Z7=AA7,\"\",AA7))))))))","AF17":"=COUNTIF(L45:AA45,AE17)","AG17":"=SUMIF(L45:AA45,AE17,L55:AA55)","AH17":"=AG17*100000+16-AD17","AI17":"=RANK(AH17,AH2:AH55)","AJ17":"=IF(AI17=1,1,IF(AI17=2,2,IF(AI17=3,3,\"\")))","E18":"=LOOKUP(B17,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$F$7:$F$2266)","G18":"=LOOKUP(E18,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","I18":"=LOOKUP(G18,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","L18":"=IF(B17=I30,5,0)","M18":"=IF(C13=I30,6,0)","N18":"=IF(E10=I30,7,0)","O18":"=IF(E18=I30,7,0)","P18":"=IF(G10=I30,8,0)","Q18":"=IF(G14=I30,8,0)","R18":"=IF(G18=I30,8,0)","S18":"=IF(G22=I30,8,0)","T18":"=IF(I10=I30,9,0)","U18":"=IF(I12=I30,9,0)","V18":"=IF(I14=I30,9,0)","W18":"=IF(I16=I30,9,0)","X18":"=IF(I18=I30,9,0)","Y18":"=IF(I20=I30,9,0)","Z18":"=IF(I22=I30,9,0)","AA18":"=IF(I24=I30,9,0)","AJ18":"=IF(AI18=1,1,IF(AI18=2,2,IF(AI18=3,3,\"\")))","I19":"=LOOKUP(E18,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$G$7:$G$2266)","L19":"=IF(B17=I32,5,0)","M19":"=IF(C13=I32,6,0)","N19":"=IF(E10=I32,7,0)","O19":"=IF(E18=I32,7,0)","P19":"=IF(G10=I32,8,0)","Q19":"=IF(G14=I32,8,0)","R19":"=IF(G18=I32,8,0)","S19":"=IF(G22=I32,8,0)","T19":"=IF(I10=I32,9,0)","U19":"=IF(I12=I32,9,0)","V19":"=IF(I14=I32,9,0)","W19":"=IF(I16=I32,9,0)","X19":"=IF(I18=I32,9,0)","Y19":"=IF(I20=I32,9,0)","Z19":"=IF(I22=I32,9,0)","AA19":"=IF(I24=I32,9,0)","AJ19":"=IF(AI19=1,1,IF(AI19=2,2,IF(AI19=3,3,\"\")))","I20":"=LOOKUP(E18,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$F$7:$F$2266)","L20":"=IF(B17=I34,5,0)","M20":"=IF(C13=I34,6,0)","N20":"=IF(E10=I34,7,0)","O20":"=IF(E18=I34,7,0)","P20":"=IF(G10=I34,8,0)","Q20":"=IF(G14=I34,8,0)","R20":"=IF(G18=I34,8,0)","S20":"=IF(G22=I34,8,0)","T20":"=IF(I10=I34,9,0)","U20":"=IF(I12=I34,9,0)","V20":"=IF(I14=I34,9,0)","W20":"=IF(I16=I34,9,0)","X20":"=IF(I18=I34,9,0)","Y20":"=IF(I20=I34,9,0)","Z20":"=IF(I22=I34,9,0)","AA20":"=IF(I24=I34,9,0)","AJ20":"=IF(AI20=1,1,IF(AI20=2,2,IF(AI20=3,3,\"\")))","G21":"=LOOKUP(B17,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$I$7:$I$2266)","I21":"=LOOKUP(G22,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","L21":"=IF(B17=I36,5,0)","M21":"=IF(C13=I36,6,0)","N21":"=IF(E10=I36,7,0)","O21":"=IF(E18=I36,7,0)","P21":"=IF(G10=I36,8,0)","Q21":"=IF(G14=I36,8,0)","R21":"=IF(G18=I36,8,0)","S21":"=IF(G22=I36,8,0)","T21":"=IF(I10=I36,9,0)","U21":"=IF(I12=I36,9,0)","V21":"=IF(I14=I36,9,0)","W21":"=IF(I16=I36,9,0)","X21":"=IF(I18=I36,9,0)","Y21":"=IF(I20=I36,9,0)","Z21":"=IF(I22=I36,9,0)","AA21":"=IF(I24=I36,9,0)","AJ21":"=IF(AI21=1,1,IF(AI21=2,2,IF(AI21=3,3,\"\")))","G22":"=LOOKUP(B17,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$H$7:$H$2266)","I22":"=LOOKUP(G22,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","L22":"=IF(B17=I38,5,0)","M22":"=IF(C13=I38,6,0)","N22":"=IF(E10=I38,7,0)","O22":"=IF(E18=I38,7,0)","P22":"=IF(G10=I38,8,0)","Q22":"=IF(G14=I38,8,0)","R22":"=IF(G18=I38,8,0)","S22":"=IF(G22=I38,8,0)","T22":"=IF(I10=I38,9,0)","U22":"=IF(I12=I38,9,0)","V22":"=IF(I14=I38,9,0)","W22":"=IF(I16=I38,9,0)","X22":"=IF(I18=I38,9,0)","Y22":"=IF(I20=I38,9,0)","Z22":"=IF(I22=I38,9,0)","AA22":"=IF(I24=I38,9,0)","AJ22":"=IF(AI22=1,1,IF(AI22=2,2,IF(AI22=3,3,\"\")))","I23":"=LOOKUP(B17,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$K$7:$K$2266)","L23":"=IF(B17=I40,5,0)","M23":"=IF(C13=I40,6,0)","N23":"=IF(E10=I40,7,0)","O23":"=IF(E18=I40,7,0)","P23":"=IF(G10=I40,8,0)","Q23":"=IF(G14=I40,8,0)","R23":"=IF(G18=I40,8,0)","S23":"=IF(G22=I40,8,0)","T23":"=IF(I10=I40,9,0)","U23":"=IF(I12=I40,9,0)","V23":"=IF(I14=I40,9,0)","W23":"=IF(I16=I40,9,0)","X23":"=IF(I18=I40,9,0)","Y23":"=IF(I20=I40,9,0)","Z23":"=IF(I22=I40,9,0)","AA23":"=IF(I24=I40,9,0)","AD23":"=MATCH(1,AJ2:AJ17,0)","AJ23":"=IF(AI23=1,1,IF(AI23=2,2,IF(AI23=3,3,\"\")))","I24":"=LOOKUP(B17,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$J$7:$J$2266)","L24":"=IF(B17=I42,5,0)","M24":"=IF(C13=I42,6,0)","N24":"=IF(E10=I42,7,0)","O24":"=IF(E18=I42,7,0)","P24":"=IF(G10=I42,8,0)","Q24":"=IF(G14=I42,8,0)","R24":"=IF(G18=I42,8,0)","S24":"=IF(G22=I42,8,0)","T24":"=IF(I10=I42,9,0)","U24":"=IF(I12=I42,9,0)","V24":"=IF(I14=I42,9,0)","W24":"=IF(I16=I42,9,0)","X24":"=IF(I18=I42,9,0)","Y24":"=IF(I20=I42,9,0)","Z24":"=IF(I22=I42,9,0)","AA24":"=IF(I24=I42,9,0)","AD24":"=MATCH(2,AJ2:AJ17,0)","AJ24":"=IF(AI24=1,1,IF(AI24=2,2,IF(AI24=3,3,\"\")))","L25":"=IF(SUM(L10:L24)>0,L7,\"\")","M25":"=IF(SUM(M10:M24)>0,M7,\"\")","N25":"=IF(SUM(N10:N24)>0,N7,\"\")","O25":"=IF(SUM(O10:O24)>0,O7,\"\")","P25":"=IF(SUM(P10:P24)>0,P7,\"\")","Q25":"=IF(SUM(Q10:Q24)>0,Q7,\"\")","R25":"=IF(SUM(R10:R24)>0,R7,\"\")","S25":"=IF(SUM(S10:S24)>0,S7,\"\")","T25":"=IF(SUM(T10:T24)>0,T7,\"\")","U25":"=IF(SUM(U10:U24)>0,U7,\"\")","V25":"=IF(SUM(V10:V24)>0,V7,\"\")","W25":"=IF(SUM(W10:W24)>0,W7,\"\")","X25":"=IF(SUM(X10:X24)>0,X7,\"\")","Y25":"=IF(SUM(Y10:Y24)>0,Y7,\"\")","Z25":"=IF(SUM(Z10:Z24)>0,Z7,\"\")","AA25":"=IF(SUM(AA10:AA24)>0,AA7,\"\")","AD25":"=MATCH(3,AJ2:AJ17,0)","AJ25":"=IF(AI25=1,1,IF(AI25=2,2,IF(AI25=3,3,\"\")))","AJ26":"=IF(AI26=1,1,IF(AI26=2,2,IF(AI26=3,3,\"\")))","E27":"=LOOKUP(C31,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","G27":"=LOOKUP(E28,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","I27":"=LOOKUP(G28,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","AJ27":"=IF(AI27=1,1,IF(AI27=2,2,IF(AI27=3,3,\"\")))","E28":"=LOOKUP(C31,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","G28":"=LOOKUP(E28,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","I28":"=LOOKUP(G28,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","AJ28":"=IF(AI28=1,1,IF(AI28=2,2,IF(AI28=3,3,\"\")))","I29":"=LOOKUP(E28,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$G$7:$G$2266)","AJ29":"=IF(AI29=1,1,IF(AI29=2,2,IF(AI29=3,3,\"\")))","C30":"=E2","I30":"=LOOKUP(E28,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$F$7:$F$2266)","L30":"=L10","M30":"=M10","N30":"=N10","O30":"=O10","P30":"=P10","Q30":"=Q10","R30":"=R10","S30":"=S10","T30":"=T10","U30":"=U10","V30":"=V10","W30":"=W10","X30":"=X10","Y30":"=Y10","Z30":"=Z10","AA30":"=AA10","AJ30":"=IF(AI30=1,1,IF(AI30=2,2,IF(AI30=3,3,\"\")))","C31":"=C2","G31":"=LOOKUP(C31,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$G$7:$G$2266)","I31":"=LOOKUP(G32,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","L31":"=IF(L10=0,L11,0)","M31":"=IF(L10=0,M11,0)","N31":"=IF(L10=0,IF(M10=0,N11,0),0)","O31":"=IF(L10=0,O11,0)","P31":"=IF(L10=0,IF(M10=0,IF(N10=0,P11,0),0),0)","Q31":"=IF(L10=0,IF(M10=0,Q11,0),0)","R31":"=IF(L10=0,IF(O10=0,R11,0),0)","S31":"=IF(L10=0,S11,0)","T31":"=IF(L10=0,IF(M10=0,IF(N10=0,IF(P10=0,T11,0),0),0),0)","U31":"=IF(L10=0,IF(M10=0,IF(N10=0,U11,0),0),0)","V31":"=IF(L10=0,IF(M10=0,IF(Q10=0,V11,0),0),0)","W31":"=IF(L10=0,IF(M10=0,W11,0),0)","X31":"=IF(L10=0,IF(O10=0,IF(R10=0,X11,0),0),0)","Y31":"=IF(L10=0,IF(O10=0,Y11,0),0)","Z31":"=IF(L10=0,IF(S10=0,Z11,0),0)","AA31":"=IF(L10=0,AA11,0)","AJ31":"=IF(AI31=1,1,IF(AI31=2,2,IF(AI31=3,3,\"\")))","G32":"=LOOKUP(C31,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$F$7:$F$2266)","I32":"=LOOKUP(G32,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","L32":"=L12","M32":"=IF(L12=0,M12,0)","N32":"=IF(L12=0,IF(M12=0,N12,0),0)","O32":"=IF(L12=0,O12,0)","P32":"=IF(L12=0,IF(M12=0,IF(N12=0,P12,0),0),0)","Q32":"=IF(L12=0,IF(M12=0,Q12,0),0)","R32":"=IF(L12=0,IF(O12=0,R12,0),0)","S32":"=IF(L12=0,S12,0)","T32":"=IF(L12=0,IF(M12=0,IF(N12=0,IF(P12=0,T12,0),0),0),0)","U32":"=IF(L12=0,IF(M1=0,IF(N12=0,U12,0),0),0)","V32":"=IF(L12=0,IF(M12=0,IF(Q12=0,V12,0),0),0)","W32":"=IF(L12=0,W12,0)","X32":"=IF(L12=0,IF(O12=0,IF(R12=0,X12,0),0),0)","Y32":"=IF(L12=0,IF(O12=0,Y12,0),0)","Z32":"=IF(L12=0,IF(S12=0,Z12,0),0)","AA32":"=IF(L12=0,AA12,0)","AJ32":"=IF(AI32=1,1,IF(AI32=2,2,IF(AI32=3,3,\"\")))","I33":"=LOOKUP(C31,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$I$7:$I$2266)","L33":"=IF(L10=0,IF(L11=0,L13,0),0)","M33":"=IF(L10=0,IF(L11=0,IF(M10=0,IF(M11=0,M13,0),0),0),0)","N33":"=IF(L10=0,IF(L11=0,IF(M10=0,IF(M11=0,N13,0),0),0),0)","O33":"=IF(L10=0,O13,0)","P33":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),IF(AND(N10=0,N11=0),P13,0),0),0)","Q33":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),Q13,0),0)","R33":"=IF(AND(L10=0,L11=0),IF(AND(O10=0,O11=0),R13,0),0)","S33":"=IF(L10=0,IF(L11=0,S13,0),0)","T33":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),IF(AND(N10=0,N11=0),IF(AND(P10=0,P11=0),T13,0),0),0),0)","U33":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),IF(AND(N10=0,N11=0),U13,0),0),0)","V33":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),IF(AND(Q10=0,Q11=0),V13,0),0),0)","W33":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),W13,0),0)","X33":"=IF(AND(L10=0,L11=0),IF(AND(O10=0,O11=0),IF(AND(R10=0,R11=0),X13,0),0),0)","Y33":"=IF(AND(L10=0,L11=0),IF(AND(O10=0,O11=0),IF(AND(R10=0,R11=0),Y13,0),0),0)","Z33":"=IF(AND(L10=0,L11=0),IF(AND(S10=0,S11=0),Z13,0),0)","AA33":"=IF(AND(L10=0,L11=0),AA13,0)","AJ33":"=IF(AI33=1,1,IF(AI33=2,2,IF(AI33=3,3,\"\")))","I34":"=LOOKUP(C31,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$H$7:$H$2266)","L34":"=IF(L10=0,L14,0)","M34":"=IF(L10=0,IF(M10=0,M14,0),0)","N34":"=IF(L10=0,IF(M10=0,N14,0),0)","O34":"=IF(L10=0,O14,0)","P34":"=IF(L10=0,IF(M10=0,IF(N10=0,P14,0),0),0)","Q34":"=IF(L10=0,IF(M10=0,Q14,0),0)","R34":"=IF(L10=0,IF(O10=0,R14,0),0)","S34":"=IF(L10=0,S14,0)","T34":"=IF(L10=0,IF(M10=0,IF(N10=0,IF(P10=0,T14,0),0),0),0)","U34":"=IF(L10=0,IF(M10=0,IF(N10=0,U14,0),0),0)","V34":"=IF(L10=0,IF(M10=0,IF(Q10=0,V14,0),0),0)","W34":"=IF(L10=0,IF(M10=0,W14,0),0)","X34":"=IF(L10=0,IF(O10=0,IF(R10=0,X14,0),0),0)","Y34":"=IF(L10=0,IF(O10=0,Y14,0),0)","Z34":"=IF(L10=0,IF(S10=0,Z14,0),0)","AA34":"=IF(L10=0,AA14,0)","AJ34":"=IF(AI34=1,1,IF(AI34=2,2,IF(AI34=3,3,\"\")))","E35":"=E3","G35":"=LOOKUP(E36,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","I35":"=LOOKUP(G36,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","L35":"=IF(L12=0,L15,0)","M35":"=IF(AND(L12=0,M12=0),M15,0)","N35":"=IF(L12=0,IF(M12=0,N15,0),0)","O35":"=IF(L12=0,O15,0)","P35":"=IF(L12=0,IF(M12=0,IF(N12=0,P15,0),0),0)","Q35":"=IF(L12=0,IF(M12=0,Q15,0),0)","R35":"=IF(L12=0,IF(O12=0,R15,0),0)","S35":"=IF(L12=0,S15,0)","T35":"=IF(L12=0,IF(M12=0,IF(N12=0,IF(P12=0,T15,0),0),0),0)","U35":"=IF(L12=0,IF(M12=0,IF(N12=0,U15,0),0),0)","V35":"=IF(L12=0,IF(M12=0,IF(Q12=0,V15,0),0),0)","W35":"=IF(L12=0,IF(M12=0,W15,0),0)","X35":"=IF(L12=0,IF(O12=0,IF(R12=0,X15,0),0),0)","Y35":"=IF(L12=0,IF(O12=0,Y15,0),0)","Z35":"=IF(L12=0,IF(S12=0,Z15,0),0)","AA35":"=IF(L12=0,AA15,0)","AJ35":"=IF(AI35=1,1,IF(AI35=2,2,IF(AI35=3,3,\"\")))","E36":"=C3","G36":"=LOOKUP(E36,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","I36":"=LOOKUP(G36,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","L36":"=L16","M36":"=IF(L16=0,M16,0)","N36":"=IF(L16=0,IF(M16=0,N16,0),0)","O36":"=IF(L16=0,O16,0)","P36":"=IF(L16=0,IF(M16=0,IF(N16=0,P16,0),0),0)","Q36":"=IF(L16=0,IF(M16=0,Q16,0),0)","R36":"=IF(L16=0,IF(O16=0,R16,0),0)","S36":"=IF(L16=0,S16,0)","T36":"=IF(L16=0,IF(M16=0,IF(N16=0,IF(P16=0,T16,0),0),0),0)","U36":"=IF(L16=0,IF(M16=0,IF(N16=0,U16,0),0),0)","V36":"=IF(L16=0,IF(M16=0,IF(Q16=0,V16,0),0),0)","W36":"=IF(L16=0,IF(M16=0,W16,0),0)","X36":"=IF(L16=0,IF(O16=0,IF(R16=0,X16,0),0),0)","Y36":"=IF(L16=0,IF(O16=0,Y16,0),0)","Z36":"=IF(L16=0,IF(S16=0,Z16,0),0)","AA36":"=IF(L16=0,AA16,0)","AJ36":"=IF(AI36=1,1,IF(AI36=2,2,IF(AI36=3,3,\"\")))","I37":"=LOOKUP(E36,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$G$7:$G$2266)","L37":"=IF(L10=0,IF(L11=0,IF(L13=0,L17,0),0),0)","M37":"=IF(AND(L10=0,L11=0),IF(AND(L13=0,M10=0),IF(AND(M11=0,M13=0),M17,0),0),0)","N37":"=IF(L10=0,IF(L11=0,IF(L13=0,IF(M10=0,IF(M11=0,IF(M13=0,N17,0),0),0),0),0),0)","O37":"=IF(L10=0,IF(L11=0,IF(L13=0,O17,0),0),0)","P37":"=IF(AND(L10=0,L11=0),IF(AND(L13=0,M10=0),IF(AND(M11=0,M13=0),IF(AND(N10=0,N11=0),IF(N13=0,P17,0),0),0),0),0)","Q37":"=IF(AND(L10=0,L11=0),IF(AND(L13=0,M10=0),IF(AND(M11=0,M13=0),Q17,0),0),0)","R37":"=IF(L10=0,IF(L11=0,IF(L13=0,IF(O10=0,IF(O11=0,IF(O13=0,R17,0),0),0),0),0),0)","S37":"=IF(L10=0,IF(L11=0,IF(L13=0,S17,0),0),0)","T37":"=IF(AND(L10=0,L11=0),IF(AND(L13=0,M10=0),IF(AND(M11=0,M13=0),IF(AND(N10=0,N11=0),IF(AND(N13=0,P10=0),IF(AND(P11=0,P13=0),T17,0),0),0),0),0),0)","U37":"=IF(AND(L10=0,L11=0),IF(AND(L13=0,M10=0),IF(AND(M11=0,M13=0),IF(AND(N10=0,N11=0),IF(M13=0,U17,0),0),0),0),0)","V37":"=IF(AND(L10=0,L11=0),IF(AND(L13=0,M10=0),IF(AND(M11=0,M13=0),IF(AND(Q10=0,Q11=0),IF(Q13=0,V17,0),0),0),0),0)","W37":"=IF(L10=0,IF(L11=0,IF(L13=0,IF(M10=0,IF(M11=0,IF(M13=0,W17,0),0),0),0),0),0)","X37":"=IF(AND(L10=0,L11=0),IF(AND(L13=0,O10=0),IF(AND(O11=0,O13=0),IF(AND(R10=0,R11=0),IF(R13=0,X17,0),0),0),0),0)","Y37":"=IF(AND(L10=0,L11=0),IF(AND(L13=0,O10=0),IF(AND(O11=0,O13=0),Y17,0),0),0)","Z37":"=IF(AND(L10=0,L11=0),IF(AND(L13=0,S10=0),IF(AND(S11=0,S13=0),Z17,0),0),0)","AA37":"=IF(L10=0,IF(L11=0,IF(L13=0,AA17,0),0),0)","AJ37":"=IF(AI37=1,1,IF(AI37=2,2,IF(AI37=3,3,\"\")))","I38":"=LOOKUP(E36,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$F$7:$F$2266)","L38":"=IF(AND(L10=0,L11=0),L18,0)","M38":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),M18,0),0)","N38":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),N18,0),0)","O38":"=IF(AND(L10=0,L11=0),O18,0)","P38":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),IF(AND(N10=0,N11=0),P18,0),0),0)","Q38":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),Q18,0),0)","R38":"=IF(AND(L10=0,L11=0),IF(AND(O10=0,O11=0),R18,0),0)","S38":"=IF(L10=0,IF(L11=0,S18,0),0)","T38":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),IF(AND(N10=0,N11=0),IF(AND(P10=0,P11=0),T18,0),0),0),0)","U38":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),IF(AND(N10=0,N11=0),U18,0),0),0)","V38":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),IF(AND(Q10=0,Q11=0),V18,0),0),0)","W38":"=IF(AND(L10=0,L11=0),IF(AND(M10=0,M11=0),W18,0),0)","X38":"=IF(AND(L10=0,L11=0),IF(AND(O10=0,O11=0),IF(AND(R10=0,R11=0),X18,0),0),0)","Y38":"=IF(AND(L10=0,L11=0),IF(AND(O10=0,O11=0),Y18,0),0)","Z38":"=IF(AND(L10=0,L11=0),IF(AND(S10=0,S11=0),Z18,0),0)","AA38":"=IF(L10=0,IF(L11=0,AA18,0),0)","AJ38":"=IF(AI38=1,1,IF(AI38=2,2,IF(AI38=3,3,\"\")))","G39":"=E4","I39":"=LOOKUP(G40,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$E$7:$E$2266)","L39":"=IF(AND(L10=0,L14=0),L19,0)","M39":"=IF(AND(L10=0,L14=0),IF(AND(M10=0,M14=0),M19,0),0)","N39":"=IF(AND(L10=0,L14=0),IF(AND(M10=0,M14=0),N19,0),0)","O39":"=IF(AND(L10=0,L14=0),O19,0)","P39":"=IF(AND(L10=0,L14=0),IF(AND(M10=0,M14=0),IF(AND(N10=0,N14=0),P19,0),0),0)","Q39":"=IF(AND(L10=0,L14=0),IF(AND(M10=0,M14=0),Q19,0),0)","R39":"=IF(AND(L10=0,L14=0),IF(AND(O10=0,O14=0),R19,0),0)","S39":"=IF(AND(L10=0,L14=0),S19,0)","T39":"=IF(AND(L10=0,L14=0),IF(AND(M10=0,M14=0),IF(AND(N10=0,N14=0),IF(AND(P10=0,P14=0),T19,0),0),0),0)","U39":"=IF(AND(L10=0,L14=0),IF(AND(M10=0,M14=0),IF(AND(N10=0,N14=0),U19,0),0),0)","V39":"=IF(AND(L10=0,L14=0),IF(AND(M10=0,M14=0),IF(AND(Q10=0,Q14=0),V19,0),0),0)","W39":"=IF(AND(L10=0,L14=0),IF(AND(M10=0,M14=0),W19,0),0)","X39":"=IF(AND(L10=0,L14=0),IF(AND(O10=0,O14=0),IF(AND(R10=0,R14=0),X19,0),0),0)","Y39":"=IF(AND(L10=0,L14=0),IF(AND(O10=0,O14=0),Y19,0),0)","Z39":"=IF(AND(L10=0,L14=0),IF(AND(S10=0,S14=0),Z19,0),0)","AA39":"=IF(AND(L10=0,L14=0),AA19,0)","AJ39":"=IF(AI39=1,1,IF(AI39=2,2,IF(AI39=3,3,\"\")))","G40":"=C4","I40":"=LOOKUP(G40,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$D$7:$D$2266)","L40":"=IF(L10=0,L20,0)","M40":"=IF(AND(L10=0,M10=0),M20,0)","N40":"=IF(L10=0,N20,0)","O40":"=IF(L10=0,O20,0)","P40":"=IF(L10=0,IF(M10=0,IF(N10=0,P20,0),0),0)","Q40":"=IF(L10=0,IF(M10=0,Q20,0),0)","R40":"=IF(L10=0,IF(O10=0,R20,0),0)","S40":"=IF(L10=0,S20,0)","T40":"=IF(L10=0,IF(M10=0,IF(N10=0,IF(P10=0,T20,0),0),0),0)","U40":"=IF(L10=0,IF(M10=0,IF(N10=0,U20,0),0),0)","V40":"=IF(L10=0,IF(M10=0,IF(Q10=0,V20,0),0),0)","W40":"=IF(L10=0,IF(M10=0,W20,0),0)","X40":"=IF(L10=0,IF(O10=0,IF(R10=0,X20,0),0),0)","Y40":"=IF(L10=0,IF(O10=0,Y20,0),0)","Z40":"=IF(L10=0,IF(S10=0,Z20,0),0)","AA40":"=IF(L10=0,AA20,0)","AJ40":"=IF(AI40=1,1,IF(AI40=2,2,IF(AI40=3,3,\"\")))","I41":"=E5","L41":"=IF(AND(L12=0,L15=0),L21,0)","M41":"=IF(AND(L12=0,L15=0),IF(AND(M12=0,M15=0),M21,0),0)","N41":"=IF(AND(L12=0,L15=0),IF(AND(M12=0,M15=0),IF(AND(N12=0,N15=0),N21,0),0),0)","O41":"=IF(AND(L12=0,L15=0),O21,0)","P41":"=IF(AND(L12=0,L15=0),IF(AND(M12=0,M15=0),IF(AND(N12=0,N15=0),P21,0),0),0)","Q41":"=IF(AND(L12=0,L15=0),IF(AND(M12=0,M15=0),Q21,0),0)","R41":"=IF(AND(L12=0,L15=0),IF(AND(O12=0,O15=0),R21,0),0)","S41":"=IF(AND(L12=0,L15=0),S21,0)","T41":"=IF(AND(L12=0,L15=0),IF(AND(M12=0,M15=0),IF(AND(N12=0,N15=0),IF(AND(P12=0,P15=0),T21,0),0),0),0)","U41":"=IF(AND(L12=0,L15=0),IF(AND(M12=0,M15=0),IF(AND(N12=0,N15=0),U21,0),0),0)","V41":"=IF(AND(L12=0,L15=0),IF(AND(M12=0,M15=0),IF(AND(Q12=0,Q15=0),V21,0),0),0)","W41":"=IF(AND(L12=0,L15=0),IF(AND(M12=0,M15=0),W21,0),0)","X41":"=IF(AND(L12=0,L15=0),IF(AND(O12=0,O15=0),IF(AND(R12=0,R15=0),X21,0),0),0)","Y41":"=IF(AND(L12=0,L15=0),IF(AND(O12=0,O15=0),Y21,0),0)","Z41":"=IF(AND(L12=0,L15=0),IF(AND(S12=0,S15=0),Z21,0),0)","AA41":"=IF(AND(L12=0,L15=0),AA21,0)","AJ41":"=IF(AI41=1,1,IF(AI41=2,2,IF(AI41=3,3,\"\")))","I42":"=C5","L42":"=IF(L12=0,L22,0)","M42":"=IF(AND(L12=0,M12=0),M22,0)","N42":"=IF(AND(L12=0,M12=0),IF(N12=0,N22,0),0)","O42":"=IF(AND(L12=0,O12=0),O22,0)","P42":"=IF(AND(L12=0,M12=0),IF(N12=0,P22,0),0)","Q42":"=IF(AND(L12=0,M12=0),Q22,0)","R42":"=IF(AND(L12=0,O12=0),R22,0)","S42":"=IF(L12=0,S22,0)","T42":"=IF(AND(L12=0,M12=0),IF(AND(N12=0,P12=0),T22,0),0)","U42":"=IF(L12=0,IF(M12=0,IF(N12=0,U22,0),0),0)","V42":"=IF(L12=0,IF(M12=0,IF(Q12=0,V22,0),0),0)","W42":"=IF(L12=0,IF(M12=0,W22,0),0)","X42":"=IF(L12=0,IF(O12=0,IF(R12=0,X22,0),0),0)","Y42":"=IF(L12=0,IF(O12=0,Y22,0),0)","Z42":"=IF(AND(L12=0,S12=0),Z22,0)","AA42":"=IF(L12=0,AA22,0)","AJ42":"=IF(AI42=1,1,IF(AI42=2,2,IF(AI42=3,3,\"\")))","L43":"=IF(L16=0,L23,0)","M43":"=IF(AND(L16=0,M16=0),M23,0)","N43":"=IF(AND(L16=0,M16=0),IF(N16=0,N23,0),0)","O43":"=IF(AND(L16=0,O16=0),O23,0)","P43":"=IF(L16=0,IF(M16=0,IF(N16=0,P23,0),0),0)","Q43":"=IF(L16=0,IF(M16=0,Q23,0),0)","R43":"=IF(L16=0,IF(O16=0,R23,0),0)","S43":"=IF(L16=0,S23,0)","T43":"=IF(L16=0,IF(M16=0,IF(N16=0,IF(P16=0,T23,0),0),0),0)","U43":"=IF(L16=0,IF(M16=0,IF(N16=0,U23,0),0),0)","V43":"=IF(L16=0,IF(M16=0,IF(Q16=0,V23,0),0),0)","W43":"=IF(L16=0,IF(M16=0,W23,0),0)","X43":"=IF(L16=0,IF(O16=0,IF(R16=0,X23,0),0),0)","Y43":"=IF(L16=0,IF(O16=0,Y23,0),0)","Z43":"=IF(L16=0,IF(S16=0,Z23,0),0)","AA43":"=IF(L16=0,AA23,0)","AJ43":"=IF(AI43=1,1,IF(AI43=2,2,IF(AI43=3,3,\"\")))","E44":"=IF(ISNUMBER(AD23),OFFSET(AE1,AD23,0),\"\")","G44":"=IF(ISNUMBER(AD24),OFFSET(AE1,AD24,0),\"\")","I44":"=OFFSET(AE1,AD25,0)","L44":"=L24","M44":"=IF(L24=0,M24,0)","N44":"=IF(AND(L24=0,M24=0),N24,0)","O44":"=IF(L24=0,O24,0)","P44":"=IF(AND(L24=0,M24=0),IF(N24=0,P24,0),0)","Q44":"=IF(AND(L24=0,M24=0),Q24,0)","R44":"=IF(AND(L24=0,O24=0),R24,0)","S44":"=IF(L24=0,S24,0)","T44":"=IF(AND(L24=0,M24=0),IF(AND(N24=0,P24=0),T24,0),0)","U44":"=IF(AND(L24=0,M24=0),IF(N14=0,U24,0),0)","V44":"=IF(AND(L24=0,M24=0),IF(Q24=0,V24,0),0)","W44":"=IF(AND(L12=0,M12=0),W24,0)","X44":"=IF(AND(L24=0,O24=0),IF(R24=0,X24,0),0)","Y44":"=IF(L24=0,IF(O24=0,Y24,0),0)","Z44":"=IF(AND(L24=0,S24=0),Z24,0)","AA44":"=AA24","AJ44":"=IF(AI44=1,1,IF(AI44=2,2,IF(AI44=3,3,\"\")))","E45":"=LOOKUP(E44,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$B$7:$B$2266)","G45":"=LOOKUP(G44,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$B$7:$B$2266)","I45":"=LOOKUP(I44,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$B$7:$B$2266)","L45":"=IF(SUM(L30:L44)>0,L7,\"\")","M45":"=IF(SUM(M30:M44)>0,M7,\"\")","N45":"=IF(SUM(N30:N44)>0,N7,\"\")","O45":"=IF(SUM(O30:O44)>0,O7,\"\")","P45":"=IF(SUM(P30:P44)>0,P7,\"\")","Q45":"=IF(SUM(Q30:Q44)>0,Q7,\"\")","R45":"=IF(SUM(R30:R44)>0,R7,\"\")","S45":"=IF(SUM(S30:S44)>0,S7,\"\")","T45":"=IF(SUM(T30:T44)>0,T7,\"\")","U45":"=IF(SUM(U30:U44)>0,U7,\"\")","V45":"=IF(SUM(V30:V44)>0,V7,\"\")","W45":"=IF(SUM(W30:W44)>0,W7,\"\")","X45":"=IF(SUM(X30:X44)>0,X7,\"\")","Y45":"=IF(SUM(Y30:Y44)>0,Y7,\"\")","Z45":"=IF(SUM(Z30:Z44)>0,Z7,\"\")","AA45":"=IF(SUM(AA30:AA44)>0,AA7,\"\")","AJ45":"=IF(AI45=1,1,IF(AI45=2,2,IF(AI45=3,3,\"\")))","E46":"=LOOKUP(E44,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266)","G46":"=LOOKUP(G44,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266)","I46":"=LOOKUP(I44,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266)","L46":"=IF(L45=\"\",\"\",LOOKUP(L45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","M46":"=IF(M45=\"\",\"\",LOOKUP(M45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","N46":"=IF(N45=\"\",\"\",LOOKUP(N45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","O46":"=IF(O45=\"\",\"\",LOOKUP(O45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","P46":"=IF(P45=\"\",\"\",LOOKUP(P45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","Q46":"=IF(Q45=\"\",\"\",LOOKUP(Q45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","R46":"=IF(R45=\"\",\"\",LOOKUP(R45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","S46":"=IF(S45=\"\",\"\",LOOKUP(S45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","T46":"=IF(T45=\"\",\"\",LOOKUP(T45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","U46":"=IF(U45=\"\",\"\",LOOKUP(U45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","V46":"=IF(V45=\"\",\"\",LOOKUP(V45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","W46":"=IF(W45=\"\",\"\",LOOKUP(W45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","X46":"=IF(X45=\"\",\"\",LOOKUP(X45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","Y46":"=IF(Y45=\"\",\"\",LOOKUP(Y45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","Z46":"=IF(Z45=\"\",\"\",LOOKUP(Z45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","AA46":"=IF(AA45=\"\",\"\",LOOKUP(AA45,始祖牛ﾃﾞｰﾀ!$A$7:$A$2266,始祖牛ﾃﾞｰﾀ!$C$7:$C$2266))","AJ46":"=IF(AI46=1,1,IF(AI46=2,2,IF(AI46=3,3,\"\")))","D47":"=(SUMIF(L45:AA45,E44,L47:AA47))/2","E47":"=C47*D47*(1+E46/100)","F47":"=(SUMIF(L45:AA45,G44,L47:AA47))/2","G47":"=C47*F47*(1+G46/100)","H47":"=(SUMIF(L45:AA45,I44,L47:AA47))/2","I47":"=C47*H47*(1+I46/100)","L47":"=SUMIF(L30:L45,2,L30:L45)","M47":"=SUMIF(M30:M45,2,M30:M45)","N47":"=SUMIF(N30:N45,2,N30:N45)","O47":"=SUMIF(O30:O45,2,O30:O45)","P47":"=SUMIF(P30:P45,2,P30:P45)","Q47":"=SUMIF(Q30:Q45,2,Q30:Q45)","R47":"=SUMIF(R30:R45,2,R30:R45)","S47":"=SUMIF(S30:S45,2,S30:S45)","T47":"=SUMIF(T30:T45,2,T30:T45)","U47":"=SUMIF(U30:U45,2,U30:U45)","V47":"=SUMIF(V30:V45,2,V30:V45)","W47":"=SUMIF(W30:W45,2,W30:W45)","X47":"=SUMIF(X30:X45,2,X30:X45)","Y47":"=SUMIF(Y30:Y45,2,Y30:Y45)","Z47":"=SUMIF(Z30:Z45,2,Z30:Z45)","AA47":"=SUMIF(AA30:AA45,2,AA30:AA45)","AJ47":"=IF(AI47=1,1,IF(AI47=2,2,IF(AI47=3,3,\"\")))","C48":"=C47/2","D48":"=(SUMIF(L45:AA45,E44,L48:AA48))/3","E48":"=C48*D48*(1+E46/100)","F48":"=(SUMIF(L45:AA45,G44,L48:AA48))/3","G48":"=C48*F48*(1+G46/100)","H48":"=(SUMIF(L45:AA45,I44,L48:AA48))/3","I48":"=C48*H48*(1+I46/100)","L48":"=SUMIF(L30:L45,3,L30:L45)","M48":"=SUMIF(M30:M45,3,M30:M45)","N48":"=SUMIF(N30:N45,3,N30:N45)","O48":"=SUMIF(O30:O45,3,O30:O45)","P48":"=SUMIF(P30:P45,3,P30:P45)","Q48":"=SUMIF(Q30:Q45,3,Q30:Q45)","R48":"=SUMIF(R30:R45,3,R30:R45)","S48":"=SUMIF(S30:S45,3,S30:S45)","T48":"=SUMIF(T30:T45,3,T30:T45)","U48":"=SUMIF(U30:U45,3,U30:U45)","V48":"=SUMIF(V30:V45,3,V30:V45)","W48":"=SUMIF(W30:W45,3,W30:W45)","X48":"=SUMIF(X30:X45,3,X30:X45)","Y48":"=SUMIF(Y30:Y45,3,Y30:Y45)","Z48":"=SUMIF(Z30:Z45,3,Z30:Z45)","AA48":"=SUMIF(AA30:AA45,3,AA30:AA45)","AJ48":"=IF(AI48=1,1,IF(AI48=2,2,IF(AI48=3,3,\"\")))","C49":"=C48/2","D49":"=(SUMIF(L45:AA45,E44,L49:AA49))/4","E49":"=C49*D49*(1+E46/100)","F49":"=(SUMIF(L45:AA45,G44,L49:AA49))/4","G49":"=C49*F49*(1+G46/100)","H49":"=(SUMIF(L45:AA45,I44,L49:AA49))/4","I49":"=C49*H49*(1+I46/100)","L49":"=SUMIF(L30:L45,4,L30:L45)","M49":"=SUMIF(M30:M45,4,M30:M45)","N49":"=SUMIF(N30:N45,4,N30:N45)","O49":"=SUMIF(O30:O45,4,O30:O45)","P49":"=SUMIF(P30:P45,4,P30:P45)","Q49":"=SUMIF(Q30:Q45,4,Q30:Q45)","R49":"=SUMIF(R30:R45,4,R30:R45)","S49":"=SUMIF(S30:S45,4,S30:S45)","T49":"=SUMIF(T30:T45,4,T30:T45)","U49":"=SUMIF(U30:U45,4,U30:U45)","V49":"=SUMIF(V30:V45,4,V30:V45)","W49":"=SUMIF(W30:W45,4,W30:W45)","X49":"=SUMIF(X30:X45,4,X30:X45)","Y49":"=SUMIF(Y30:Y45,4,Y30:Y45)","Z49":"=SUMIF(Z30:Z45,4,Z30:Z45)","AA49":"=SUMIF(AA30:AA45,4,AA30:AA45)","AJ49":"=IF(AI49=1,1,IF(AI49=2,2,IF(AI49=3,3,\"\")))","C50":"=C49/2","D50":"=(SUMIF(L45:AA45,E44,L50:AA50))/5","E50":"=C50*D50*(1+E46/100)","F50":"=(SUMIF(L45:AA45,G44,L50:AA50))/5","G50":"=C50*F50*(1+G46/100)","H50":"=(SUMIF(L45:AA45,I44,L50:AA50))/5","I50":"=C50*H50*(1+I46/100)","L50":"=SUMIF(L30:L45,5,L30:L45)","M50":"=SUMIF(M30:M45,5,M30:M45)","N50":"=SUMIF(N30:N45,5,N30:N45)","O50":"=SUMIF(O30:O45,5,O30:O45)","P50":"=SUMIF(P30:P45,5,P30:P45)","Q50":"=SUMIF(Q30:Q45,5,Q30:Q45)","R50":"=SUMIF(R30:R45,5,R30:R45)","S50":"=SUMIF(S30:S45,5,S30:S45)","T50":"=SUMIF(T30:T45,5,T30:T45)","U50":"=SUMIF(U30:U45,5,U30:U45)","V50":"=SUMIF(V30:V45,5,V30:V45)","W50":"=SUMIF(W30:W45,5,W30:W45)","X50":"=SUMIF(X30:X45,5,X30:X45)","Y50":"=SUMIF(Y30:Y45,5,Y30:Y45)","Z50":"=SUMIF(Z30:Z45,5,Z30:Z45)","AA50":"=SUMIF(AA30:AA45,5,AA30:AA45)","AJ50":"=IF(AI50=1,1,IF(AI50=2,2,IF(AI50=3,3,\"\")))","C51":"=C50/2","D51":"=(SUMIF(L45:AA45,E44,L51:AA51))/6","E51":"=C51*D51*(1+E46/100)","F51":"=(SUMIF(L45:AA45,G44,L51:AA51))/6","G51":"=C51*F51*(1+G46/100)","H51":"=(SUMIF(L45:AA45,I44,L51:AA51))/6","I51":"=C51*H51*(1+I46/100)","L51":"=SUMIF(L30:L45,6,L30:L45)","M51":"=SUMIF(M30:M45,6,M30:M45)","N51":"=SUMIF(N30:N45,6,N30:N45)","O51":"=SUMIF(O30:O45,6,O30:O45)","P51":"=SUMIF(P30:P45,6,P30:P45)","Q51":"=SUMIF(Q30:Q45,6,Q30:Q45)","R51":"=SUMIF(R30:R45,6,R30:R45)","S51":"=SUMIF(S30:S45,6,S30:S45)","T51":"=SUMIF(T30:T45,6,T30:T45)","U51":"=SUMIF(U30:U45,6,U30:U45)","V51":"=SUMIF(V30:V45,6,V30:V45)","W51":"=SUMIF(W30:W45,6,W30:W45)","X51":"=SUMIF(X30:X45,6,X30:X45)","Y51":"=SUMIF(Y30:Y45,6,Y30:Y45)","Z51":"=SUMIF(Z30:Z45,6,Z30:Z45)","AA51":"=SUMIF(AA30:AA45,6,AA30:AA45)","AJ51":"=IF(AI51=1,1,IF(AI51=2,2,IF(AI51=3,3,\"\")))","C52":"=C51/2","D52":"=(SUMIF(L45:AA45,E44,L52:AA52))/7","E52":"=C52*D52*(1+E46/100)","F52":"=(SUMIF(L45:AA45,G44,L52:AA52))/7","G52":"=C52*F52*(1+G46/100)","H52":"=(SUMIF(L45:AA45,I44,L52:AA52))/7","I52":"=C52*H52*(1+I46/100)","L52":"=SUMIF(L30:L45,7,L30:L45)","M52":"=SUMIF(M30:M45,7,M30:M45)","N52":"=SUMIF(N30:N45,7,N30:N45)","O52":"=SUMIF(O30:O45,7,O30:O45)","P52":"=SUMIF(P30:P45,7,P30:P45)","Q52":"=SUMIF(Q30:Q45,7,Q30:Q45)","R52":"=SUMIF(R30:R45,7,R30:R45)","S52":"=SUMIF(S30:S45,7,S30:S45)","T52":"=SUMIF(T30:T45,7,T30:T45)","U52":"=SUMIF(U30:U45,7,U30:U45)","V52":"=SUMIF(V30:V45,7,V30:V45)","W52":"=SUMIF(W30:W45,7,W30:W45)","X52":"=SUMIF(X30:X45,7,X30:X45)","Y52":"=SUMIF(Y30:Y45,7,Y30:Y45)","Z52":"=SUMIF(Z30:Z45,7,Z30:Z45)","AA52":"=SUMIF(AA30:AA45,7,AA30:AA45)","AJ52":"=IF(AI52=1,1,IF(AI52=2,2,IF(AI52=3,3,\"\")))","C53":"=C52/2","D53":"=(SUMIF(L45:AA45,E44,L53:AA53))/8","E53":"=C53*D53*(1+E46/100)","F53":"=(SUMIF(L45:AA45,G44,L53:AA53))/8","G53":"=C53*F53*(1+G46/100)","H53":"=(SUMIF(L45:AA45,I44,L53:AA53))/8","I53":"=C53*H53*(1+I46/100)","L53":"=SUMIF(L30:L45,8,L30:L45)","M53":"=SUMIF(M30:M45,8,M30:M45)","N53":"=SUMIF(N30:N45,8,N30:N45)","O53":"=SUMIF(O30:O45,8,O30:O45)","P53":"=SUMIF(P30:P45,8,P30:P45)","Q53":"=SUMIF(Q30:Q45,8,Q30:Q45)","R53":"=SUMIF(R30:R45,8,R30:R45)","S53":"=SUMIF(S30:S45,8,S30:S45)","T53":"=SUMIF(T30:T45,8,T30:T45)","U53":"=SUMIF(U30:U45,8,U30:U45)","V53":"=SUMIF(V30:V45,8,V30:V45)","W53":"=SUMIF(W30:W45,8,W30:W45)","X53":"=SUMIF(X30:X45,8,X30:X45)","Y53":"=SUMIF(Y30:Y45,8,Y30:Y45)","Z53":"=SUMIF(Z30:Z45,8,Z30:Z45)","AA53":"=SUMIF(AA30:AA45,8,AA30:AA45)","AJ53":"=IF(AI53=1,1,IF(AI53=2,2,IF(AI53=3,3,\"\")))","C54":"=C53/2","D54":"=(SUMIF(L45:AA45,E44,L54:AA54))/9","E54":"=C54*D54*(1+E46/100)","F54":"=(SUMIF(L45:AA45,G44,L54:AA54))/9","G54":"=C54*F54*(1+G46/100)","H54":"=(SUMIF(L45:AA45,I44,L54:AA54))/9","I54":"=C54*H54*(1+I46/100)","L54":"=SUMIF(L30:L45,9,L30:L45)","M54":"=SUMIF(M30:M45,9,M30:M45)","N54":"=SUMIF(N30:N45,9,N30:N45)","O54":"=SUMIF(O30:O45,9,O30:O45)","P54":"=SUMIF(P30:P45,9,P30:P45)","Q54":"=SUMIF(Q30:Q45,9,Q30:Q45)","R54":"=SUMIF(R30:R45,9,R30:R45)","S54":"=SUMIF(S30:S45,9,S30:S45)","T54":"=SUMIF(T30:T45,9,T30:T45)","U54":"=SUMIF(U30:U45,9,U30:U45)","V54":"=SUMIF(V30:V45,9,V30:V45)","W54":"=SUMIF(W30:W45,9,W30:W45)","X54":"=SUMIF(X30:X45,9,X30:X45)","Y54":"=SUMIF(Y30:Y45,9,Y30:Y45)","Z54":"=SUMIF(Z30:Z45,9,Z30:Z45)","AA54":"=SUMIF(AA30:AA45,9,AA30:AA45)","AJ54":"=IF(AI54=1,1,IF(AI54=2,2,IF(AI54=3,3,\"\")))","E55":"=SUM(E47:E54)","G55":"=SUM(G47:G54)","I55":"=SUM(I47:I54)","L55":"=IF(L45=\"\",\"\",((L47*C47)/2+(L48*C48)/3+(L49*C49)/4+(L50*C50)/5+(L51*C51)/6+(L52*C52)/7+(L53*C53/8)+(L54*C54)/9)*(1+L46/100)/100)","M55":"=IF(M45=\"\",\"\",((M47*C47)/2+(M48*C48)/3+(M49*C49)/4+(M50*C50)/5+(M51*C51)/6+(M52*C52)/7+(M53*C53/8)+(M54*C54)/9)*(1+M46/100)/100)","N55":"=IF(N45=\"\",\"\",((N47*C47)/2+(N48*C48)/3+(N49*C49)/4+(N50*C50)/5+(N51*C51)/6+(N52*C52)/7+(N53*C53/8)+(N54*C54)/9)*(1+N46/100)/100)","O55":"=IF(O45=\"\",\"\",((O47*C47)/2+(O48*C48)/3+(O49*C49)/4+(O50*C50)/5+(O51*C51)/6+(O52*C52)/7+(O53*C53/8)+(O54*C54)/9)*(1+O46/100)/100)","P55":"=IF(P45=\"\",\"\",((P47*C47)/2+(P48*C48)/3+(P49*C49)/4+(P50*C50)/5+(P51*C51)/6+(P52*C52)/7+(P53*C53/8)+(P54*C54)/9)*(1+P46/100)/100)","Q55":"=IF(Q45=\"\",\"\",((Q47*C47)/2+(Q48*C48)/3+(Q49*C49)/4+(Q50*C50)/5+(Q51*C51)/6+(Q52*C52)/7+(Q53*C53/8)+(Q54*C54)/9)*(1+Q46/100)/100)","R55":"=IF(R45=\"\",\"\",((R47*C47)/2+(R48*C48)/3+(R49*C49)/4+(R50*C50)/5+(R51*C51)/6+(R52*C52)/7+(R53*C53/8)+(R54*C54)/9)*(1+R46/100)/100)","S55":"=IF(S45=\"\",\"\",((S47*C47)/2+(S48*C48)/3+(S49*C49)/4+(S50*C50)/5+(S51*C51)/6+(S52*C52)/7+(S53*C53/8)+(S54*C54)/9)*(1+S46/100)/100)","T55":"=IF(T45=\"\",\"\",((T47*C47)/2+(T48*C48)/3+(T49*C49)/4+(T50*C50)/5+(T51*C51)/6+(T52*C52)/7+(T53*C53/8)+(T54*C54)/9)*(1+T46/100)/100)","U55":"=IF(U45=\"\",\"\",((U47*C47)/2+(U48*C48)/3+(U49*C49)/4+(U50*C50)/5+(U51*C51)/6+(U52*C52)/7+(U53*C53/8)+(U54*C54)/9)*(1+U46/100)/100)","V55":"=IF(V45=\"\",\"\",((V47*C47)/2+(V48*C48)/3+(V49*C49)/4+(V50*C50)/5+(V51*C51)/6+(V52*C52)/7+(V53*C53/8)+(V54*C54)/9)*(1+V46/100)/100)","W55":"=IF(W45=\"\",\"\",((W47*C47)/2+(W48*C48)/3+(W49*C49)/4+(W50*C50)/5+(W51*C51)/6+(W52*C52)/7+(W53*C53/8)+(W54*C54)/9)*(1+W46/100)/100)","X55":"=IF(X45=\"\",\"\",((X47*C47)/2+(X48*C48)/3+(X49*C49)/4+(X50*C50)/5+(X51*C51)/6+(X52*C52)/7+(X53*C53/8)+(X54*C54)/9)*(1+X46/100)/100)","Y55":"=IF(Y45=\"\",\"\",((Y47*C47)/2+(Y48*C48)/3+(Y49*C49)/4+(Y50*C50)/5+(Y51*C51)/6+(Y52*C52)/7+(Y53*C53/8)+(Y54*C54)/9)*(1+Y46/100)/100)","Z55":"=IF(Z45=\"\",\"\",((Z47*C47)/2+(Z48*C48)/3+(Z49*C49)/4+(Z50*C50)/5+(Z51*C51)/6+(Z52*C52)/7+(Z53*C53/8)+(Z54*C54)/9)*(1+Z46/100)/100)","AA55":"=IF(AA45=\"\",\"\",((AA47*C47)/2+(AA48*C48)/3+(AA49*C49)/4+(AA50*C50)/5+(AA51*C51)/6+(AA52*C52)/7+(AA53*C53/8)+(AA54*C54)/9)*(1+AA46/100)/100)","AJ55":"=IF(AI55=1,1,IF(AI55=2,2,IF(AI55=3,3,\"\")))","E56":"=IF(ISNUMBER(E55),E55,0)","G56":"=IF(ISNUMBER(G55),G55,0)","I56":"=IF(ISNUMBER(I55),I55,0)","E57":"=E56+G56+I56","G57":"=LOOKUP(E57,$J$2:$J$5,$K$2:$K$5)","X57":"=IF(AA24>=1,$I$24,\" \")"},"consts":{"A1":"○近交係数計算シート","J1":"近交係数","K1":"危険度判定表","L1":"←⑤近交係数と危険度","AE1":"③種♂牛別集計","AF1":"一致数","AG1":"近交","AH1":"関数","AI1":"近交高い順位","AJ1":"１～３位","A2":"①繁殖雌","B2":"一代祖","C2":"みくにざくら","F2":"※","G2":"種雄牛","I2":"繁殖雌牛","J2":0,"K2":"安　全","AD2":1,"B3":"二代祖","C3":"りょうたろう","H3":"×","J3":6.25,"K3":"注意","AD3":2,"B4":"三代祖","C4":"やすふくひさ","H4":"二代","J4":8,"K4":"注意","AD4":3,"B5":"四代祖","C5":"かねゆき","G5":"近交係数は","I5":"［判　　定］","J5":12.5,"K5":"危険な交配","AD5":4,"H6":"％","K6":"①上位共通祖先を考慮しない共通祖先一致表","AD6":5,"A7":"②種雄牛","B7":"しげきたふく","AD7":6,"A8":"♂世代","C8":1,"E8":2,"G8":3,"I8":4,"AD8":7,"D9":"③","F9":"⑤","H9":"⑨","L9":"①","M9":"②","N9":"③","O9":"④","P9":"⑤","Q9":"⑥","R9":"⑦","S9":"⑧","T9":"⑨","U9":"⑩","V9":"⑪","W9":"⑫","X9":"⑬","Y9":"⑭","Z9":"⑮","AA9":"⑯","AB9":"b","AD9":8,"K10":"b","AB10":"c","AD10":9,"C11":"②","H11":"⑩","K11":"c","AB11":"d","AD11":10,"K12":"d","AB12":"e","AD12":11,"F13":"⑥","H13":"⑪","K13":"e","AB13":"f","AD13":12,"K14":"f","AB14":"g","AD14":13,"B15":"①","H15":"⑫","K15":"g","AB15":"h","AD15":14,"K16":"h","AB16":"i","AD16":15,"D17":"④","F17":"⑦","H17":"⑬","K17":"i","AB17":"j","AD17":16,"K18":"j","AB18":"k","H19":"⑭","K19":"k","AB19":"l","K20":"l","AB20":"m","F21":"⑧","H21":"⑮","K21":"m","AB21":"n","K22":"n","AB22":"o","AC22":"④近交上位３♂座標","H23":"⑯","K23":"o","AB23":"p","AC23":"RANK1","K24":"p","AC24":"RANK2","AC25":"RANK3","A26":"♀世代","B26":0,"C26":1,"E26":2,"G26":3,"I26":4,"D27":"c","F27":"e","H27":"i","K28":"②上位共通祖先発生時に下位祖先無視","C29":"ｂ","H29":"j","L29":"①","M29":"②","N29":"③","O29":"④","P29":"⑤","Q29":"⑥","R29":"⑦","S29":"⑧","T29":"⑨","U29":"⑩","V29":"⑪","W29":"⑫","X29":"⑬","Y29":"⑭","Z29":"⑮","AA29":"⑯","K30":"b","AB30":"b","F31":"f","H31":"k","K31":"c","AB31":"c","K32":"d","AB32":"d","B33":"ａ","H33":"l","K33":"e","AB33":"e","B34":"本牛","K34":"f","AB34":"f","D35":"d","F35":"g","H35":"m","K35":"g","AB35":"g","K36":"h","AB36":"h","H37":"n","K37":"i","AB37":"i","K38":"j","AB38":"j","F39":"h","H39":"o","K39":"k","AB39":"k","K40":"l","AB40":"l","H41":"p","K41":"m","AB41":"m","K42":"n","AB42":"n","A43":"○共通祖先種雄牛名と種雄牛別近交係数","K43":"o","AB43":"o","K44":"p","AB44":"p","A45":"共通祖先までの世代数＋１","D45":"数","F45":"数","H45":"数","A46":"♂世代＋♀世代＋１","C46":"雄近交係数→","K46":"♂の近交係数","A47":"（１／２）＾","B47":"2＝","C47":25,"K47":"世代数＋１＝２","A48":"（１／２）＾","B48":"3＝","K48":"世代数＋１＝３","A49":"（１／２）＾","B49":"4＝","K49":"世代数＋１＝４","A50":"（１／２）＾","B50":"5＝","K50":"世代数＋１＝５","A51":"（１／２）＾","B51":"6＝","K51":"世代数＋１＝６","A52":"（１／２）＾","B52":"7＝","K52":"世代数＋１＝７","A53":"（１／２）＾","B53":"8＝","K53":"世代数＋１＝８","A54":"（１／２）＾","B54":"9＝","K54":"世代数＋１＝９","C55":"近交係数","D55":"①","F55":"②","H55":"③","K55":"近交係数小計","C57":"合計近交係数","F57":"％"},"initBulls":[{"yomi":"あきさくら","name":"秋桜"},{"yomi":"しげかわ6の4","name":"重川6の4"},{"yomi":"みつはるしげ","name":"光晴重"},{"yomi":"つるたま","name":"弦球"},{"yomi":"はるやまさかえ","name":"春山栄"},{"yomi":"しげなみいずみ","name":"重波泉"},{"yomi":"だい22みつしげ","name":"第二十二光重"},{"yomi":"だい1みつはる","name":"第一光晴"},{"yomi":"みつしげくまなな","name":"光重球磨七"},{"yomi":"ふくえいほう","name":"福栄豊"},{"yomi":"なみなかしまETI","name":"波中島ETI"},{"yomi":"だい2みつはる","name":"第二光晴"},{"yomi":"きくゆき","name":"菊幸"},{"yomi":"だい4つるみつ","name":"第四弦光"},{"yomi":"だい4みつしげ","name":"第四光重"},{"yomi":"つるみつしげ","name":"鶴光重"},{"yomi":"ゆきいずみ","name":"幸泉"},{"yomi":"だい9えいほう","name":"第九栄豊"},{"yomi":"たかみつしげ","name":"隆光重"},{"yomi":"みつしげぼし","name":"光重星"},{"yomi":"みつしげくまご","name":"光重球磨五"},{"yomi":"はるやまと","name":"春山都"},{"yomi":"きくみつまる","name":"菊光丸"},{"yomi":"きくみつうら","name":"菊光浦"},{"yomi":"みつしげくま","name":"光重球磨"},{"yomi":"きくつるETI","name":"菊鶴ETI"},{"yomi":"だい7なみまる","name":"第七波丸"},{"yomi":"だい16みつしげ","name":"第十六光重"}],"alias":{"十六光重":"第十六光重"},"names":[{"yomi":"あきさくら","name":"秋桜"},{"yomi":"あきみつしげ","name":"秋光重"},{"yomi":"いずみまるET","name":"泉丸ET"},{"yomi":"きくつるETI","name":"菊鶴ETI"},{"yomi":"きくみつ2ET","name":"菊光二ET"},{"yomi":"きくみつET","name":"菊光ET"},{"yomi":"きくみつうら","name":"菊光浦"},{"yomi":"きくみつまる","name":"菊光丸"},{"yomi":"きくゆき","name":"菊幸"},{"yomi":"しげおす","name":"重雄"},{"yomi":"しげかわ6の4","name":"重川6の4"},{"yomi":"しげかわさかえ","name":"重川栄"},{"yomi":"しげきた","name":"重北"},{"yomi":"しげくま","name":"重球磨"},{"yomi":"しげたま","name":"重玉"},{"yomi":"しげつる","name":"重鶴"},{"yomi":"しげとし","name":"重利"},{"yomi":"しげなみ","name":"重波"},{"yomi":"しげなみいずみ","name":"重波泉"},{"yomi":"しげふく","name":"重福"},{"yomi":"しげまるかわ","name":"重丸川"},{"yomi":"しげみつたま","name":"重光玉"},{"yomi":"だい10しげかわ","name":"第十重川"},{"yomi":"だい10みつまる","name":"第十光丸"},{"yomi":"だい11みつしげ","name":"第十一光重"},{"yomi":"だい13しげかわ","name":"第十三重川"},{"yomi":"だい14みつしげ","name":"第十四光重"},{"yomi":"だい16みつしげ","name":"第十六光重"},{"yomi":"だい18みつしげ","name":"第十八光重"},{"yomi":"だい1しげかわ","name":"第一重川"},{"yomi":"だい1みつはな","name":"第一光花"},{"yomi":"だい1みつはる","name":"第一光晴"},{"yomi":"だい22みつしげ","name":"第二十二光重"},{"yomi":"だい2しげなみ","name":"第二重波"},{"yomi":"だい2つるみつ","name":"第二弦光"},{"yomi":"だい2なみまる","name":"第二波丸"},{"yomi":"だい2みつしげ","name":"第二光重"},{"yomi":"だい2みつはる","name":"第二光晴"},{"yomi":"だい2みつふく","name":"第二光福"},{"yomi":"だい2みつまる","name":"第二光丸"},{"yomi":"だい3みつしげ","name":"第三光重"},{"yomi":"だい3みつまる","name":"第三光丸"},{"yomi":"だい4えいほう","name":"第四栄豊"},{"yomi":"だい4しげなみ","name":"第四重波"},{"yomi":"だい4つるみつ","name":"第四弦光"},{"yomi":"だい4みつしげ","name":"第四光重"},{"yomi":"だい5たまなみ","name":"第五玉波"},{"yomi":"だい5なみまる","name":"第五波丸"},{"yomi":"だい6たまなみ","name":"第六玉波"},{"yomi":"だい6はるたまET","name":"第六春玉ET"},{"yomi":"だい7なみまる","name":"第七波丸"},{"yomi":"だい9えいほう","name":"第九栄豊"},{"yomi":"たかはな","name":"高花"},{"yomi":"たかみつしげ","name":"隆光重"},{"yomi":"たけさかえ","name":"武栄"},{"yomi":"たけみつまる","name":"武光丸"},{"yomi":"たつあき","name":"竜明"},{"yomi":"たまえいほう","name":"玉栄豊"},{"yomi":"たまおす","name":"玉雄"},{"yomi":"たまきみETI2","name":"玉君ETI2"},{"yomi":"たまさつき","name":"球五月"},{"yomi":"たまつき","name":"球月"},{"yomi":"たまなみ","name":"玉波"},{"yomi":"たまなみしげ","name":"玉波重"},{"yomi":"たまなみしげに","name":"玉波重二"},{"yomi":"たまなみひめ","name":"玉波姫"},{"yomi":"たまみつしげETI","name":"球光重ETI"},{"yomi":"つるくま","name":"鶴球磨"},{"yomi":"つるしげ","name":"鶴重"},{"yomi":"つるたま","name":"弦球"},{"yomi":"つるみつうら","name":"鶴光浦"},{"yomi":"つるみつしげ","name":"鶴光重"},{"yomi":"つるみつはる","name":"弦光晴"},{"yomi":"つるゆき","name":"弦幸"},{"yomi":"としいずみ","name":"寿泉"},{"yomi":"とみしげ","name":"富重"},{"yomi":"とよいずみET","name":"豊泉ET"},{"yomi":"なみいずみ","name":"波泉"},{"yomi":"なみなかしま","name":"波中島"},{"yomi":"なみなかしまETI","name":"波中島ETI"},{"yomi":"なみふく","name":"波福"},{"yomi":"なみまる","name":"波丸"},{"yomi":"なみまるET","name":"波丸ET"},{"yomi":"なみみつ","name":"波光"},{"yomi":"なみみつとみ","name":"波光豊"},{"yomi":"なみゆたか","name":"波豊"},{"yomi":"はるあや","name":"春綾"},{"yomi":"はるさつき","name":"春五月"},{"yomi":"はるしげ","name":"春重"},{"yomi":"はるひさ","name":"春久"},{"yomi":"はるひめ","name":"春姫"},{"yomi":"はるふくET","name":"春福ET"},{"yomi":"はるみつ","name":"春光"},{"yomi":"はるみつさかえ","name":"春光栄"},{"yomi":"はるやまさかえ","name":"春山栄"},{"yomi":"はるやましげ","name":"春山重"},{"yomi":"はるやまと","name":"春山都"},{"yomi":"ひさみつしげ","name":"久光重"},{"yomi":"ひめみつしげ","name":"姫光重"},{"yomi":"ふくえいほう","name":"福栄豊"},{"yomi":"ふくみつしげ","name":"福光重"},{"yomi":"ふじたま","name":"藤玉"},{"yomi":"みつさかえ","name":"光栄"},{"yomi":"みつしげET","name":"光重ET"},{"yomi":"みつしげくま","name":"光重球磨"},{"yomi":"みつしげくま7","name":"光重球磨七"},{"yomi":"みつしげくまご","name":"光重球磨五"},{"yomi":"みつしげくまなな","name":"光重球磨七"},{"yomi":"みつしげくまに","name":"光重球磨二"},{"yomi":"みつしげくまろく","name":"光重球磨六"},{"yomi":"みつしげぼし","name":"光重星"},{"yomi":"みつたから","name":"光宝"},{"yomi":"みつたけ","name":"光武"},{"yomi":"みつたましげET","name":"光玉重ET"},{"yomi":"みつたまなみ","name":"光玉波"},{"yomi":"みつとし","name":"光利"},{"yomi":"みつなが","name":"光長"},{"yomi":"みつはるET","name":"光春ET"},{"yomi":"みつはるしげ","name":"光晴重"},{"yomi":"みつゆう","name":"光優"},{"yomi":"みつよしET","name":"光義ET"},{"yomi":"ゆうせん","name":"優泉"},{"yomi":"ゆきいずみ","name":"幸泉"},{"yomi":"ー","name":"ー"}]};
+let MC = EMBED.mc;
+let NAMES = EMBED.names.slice();
+const ALIAS = EMBED.alias||{};
+// 漢字→読み 逆引き（マスタ + alias）
+let K2Y = {};
+function rebuildK2Y(){ K2Y={}; for(let i=0;i<MC.A.length;i++){ const nm=MC.B[i]; if(nm&&!(nm in K2Y))K2Y[nm]=MC.A[i]; }
+  for(const k in ALIAS){ const target=ALIAS[k]; if(target in K2Y)K2Y[k]=K2Y[target]; } }
+let BULLS = EMBED.initBulls.slice();   // {yomi,name}
+let engine = new KoubaiEngine(MC, {formulas:EMBED.formulas, consts:EMBED.consts});
+function rebuildEngine(){ engine=new KoubaiEngine(MC,{formulas:EMBED.formulas,consts:EMBED.consts}); }
+rebuildK2Y();
+
+let COWS=[]; // 在籍牛 {name, nationalId, sire, maternalSire}
+
+// ===== Firebase =====
+const firebaseConfig={apiKey:"AIzaSyBk4Q0lJ8kM3vN9pR2sT5uW7xY1zA6bC8d",authDomain:"breeding-manager5.firebaseapp.com",databaseURL:"https://breeding-manager5-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"breeding-manager5"};
+const FARM="obara"; // 将来: 農家ごとに切替
+let kdb=null,kref=null,cowRef=null;
+try{ firebase.initializeApp(firebaseConfig); kdb=firebase.database();
+  firebase.auth().signInAnonymously().catch(()=>setStatus("認証エラー（ローカルのみ）"));
+  firebase.auth().onAuthStateChanged(u=>{ if(u){
+    kref=kdb.ref("koubai/farms/"+FARM);
+    cowRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/cows"); // 読取のみ
+    loadCows(); loadCloud();
+  }});
+}catch(e){ setStatus("オフライン（ローカルのみ）"); }
+function setStatus(t){ document.getElementById("syncStatus").textContent=t; }
+
+function loadCows(){
+  if(!cowRef)return;
+  cowRef.once("value").then(s=>{ let v=s.val(); if(typeof v==="string"){try{v=JSON.parse(v);}catch(e){v=[];}}
+    COWS=(v||[]).filter(c=>c&&c.name).map(c=>({name:c.name,nationalId:c.nationalId||"",sire:c.sire||"",maternalSire:c.maternalSire||""}));
+    setStatus("✓ 在籍牛 "+COWS.length+"頭 読込・種雄牛はクラウド同期");
+  }).catch(()=>setStatus("在籍牛の読込に失敗（手入力できます）"));
+}
+function loadCloud(){
+  if(!kref)return;
+  kref.once("value").then(s=>{ let d=s.val(); if(typeof d==="string"){try{d=JSON.parse(d);}catch(e){d=null;}}
+    if(d){
+      if(Array.isArray(d.bulls)) BULLS=d.bulls;
+      if(Array.isArray(d.addedMaster)){ d.addedMaster.forEach(m=>addToMaster(m,true)); rebuildEngine(); rebuildK2Y(); }
+    }
+    renderBulls();
+  }).catch(()=>{});
+}
+function saveCloud(){
+  if(!kref){ toast("クラウド未接続（この端末には反映）"); renderBulls(); return; }
+  const initYomi=new Set(EMBED.names.map(n=>n.yomi));
+  const addedMaster=[];
+  for(let i=0;i<MC.A.length;i++){ if(!initYomi.has(MC.A[i])) addedMaster.push({yomi:MC.A[i],name:MC.B[i],f:MC.C[i],s1y:MC.D[i],s1:MC.E[i],s2y:MC.F[i],s2:MC.G[i],s3y:MC.H[i],s3:MC.I[i],s4y:MC.J[i],s4:MC.K[i]}); }
+  kref.set(JSON.stringify({bulls:BULLS,addedMaster:addedMaster})).then(()=>toast("保存しました")).catch(()=>toast("保存エラー"));
+}
+
+// ===== マスタ =====
+function addToMaster(b,silent){ if(MC.A.indexOf(b.yomi)>=0)return;
+  MC.A.push(b.yomi);MC.B.push(b.name||"");MC.C.push(b.f==null||b.f===""?"":b.f);
+  MC.D.push(b.s1y||"");MC.E.push(b.s1||"");MC.F.push(b.s2y||"");MC.G.push(b.s2||"");
+  MC.H.push(b.s3y||"");MC.I.push(b.s3||"");MC.J.push(b.s4y||"");MC.K.push(b.s4||"");
+  if(!NAMES.some(n=>n.yomi===b.yomi))NAMES.push({yomi:b.yomi,name:b.name||b.yomi}); }
+
+// 入力値を読みに正規化（漢字なら逆引き、ひらがなはそのまま）
+function toYomi(s){ s=(s||"").trim(); if(!s)return ""; if(K2Y[s])return K2Y[s]; if(ALIAS[s]&&K2Y[ALIAS[s]])return K2Y[ALIAS[s]]; return s; }
+
+// ===== 在籍牛選択 =====
+function openPickCow(){ document.getElementById("cowSearch").value=""; renderCowList(); openModal("pickCowModal"); }
+function renderCowList(){
+  const q=document.getElementById("cowSearch").value.trim().toLowerCase();
+  const list=COWS.filter(c=>!q||c.name.toLowerCase().includes(q)||(c.nationalId+"").includes(q)).slice(0,200);
+  document.getElementById("cowList").innerHTML=list.length?list.map((c,i)=>{
+    const idx=COWS.indexOf(c);
+    return `<div class="pick-item" onclick="selectCow(${idx})"><span><b>${esc(c.name)}</b><span class="sub"> 耳標${esc(c.nationalId)}</span></span><span class="sub">${esc(c.sire||"—")} / ${esc(c.maternalSire||"—")}</span></div>`;
+  }).join(""):`<div class="hint" style="padding:20px;text-align:center;">該当なし</div>`;
+}
+function selectCow(idx){
+  const c=COWS[idx];
+  document.getElementById("s1").value=c.sire||"";
+  document.getElementById("s2").value=c.maternalSire||"";
+  document.getElementById("s3").value="";
+  document.getElementById("s4").value="";
+  const box=document.getElementById("selCow");
+  const s1u=toYomi(c.sire), s2u=toYomi(c.maternalSire);
+  const miss=[];
+  if(c.sire&&!K2Y[c.sire]&&!isHira(c.sire))miss.push(c.sire);
+  if(c.maternalSire&&!K2Y[c.maternalSire]&&!isHira(c.maternalSire))miss.push(c.maternalSire);
+  box.innerHTML=`<b>${esc(c.name)}</b>（耳標${esc(c.nationalId)}）<div class="ped">父：${esc(c.sire||"—")} ／ 母の父：${esc(c.maternalSire||"—")}</div>`
+    + (miss.length?`<div class="warnbox">⚠ ${miss.map(esc).join("、")} は血統マスタに未登録です。正確に計算するには「種雄牛を追加」でこの牛の血統を登録してください（未登録のままだと近交係数がやや低めに出ます）。</div>`:"");
+  box.classList.add("on");
+  closeModal("pickCowModal");
+}
+function isHira(s){ return /^[ぁ-んー]+$/.test(s); }
+
+// ===== 計算 =====
+function calcAll(){
+  const s1=toYomi(val("s1")),s2=toYomi(val("s2")),s3=toYomi(val("s3")),s4=toYomi(val("s4"));
+  if(!s1&&!s2&&!s3&&!s4){ toast("母牛の血統を入力してください"); return; }
+  const rows=BULLS.map(b=>({name:b.name,yomi:b.yomi,coef:engine.compute(s1,s2,s3,s4,b.yomi)}));
+  rows.sort((a,b)=>a.coef-b.coef);
+  document.getElementById("results").innerHTML=rows.map((r,i)=>{
+    let cls="r-safe",tag="安全";
+    if(r.coef>=12.5){cls="r-danger";tag="危険";}else if(r.coef>=6.25){cls="r-warn";tag="注意";}
+    return `<div class="result-row ${cls}"><span class="rank">${i+1}</span><span class="bull">${esc(r.name)}</span><span class="tag">${tag}</span><span class="coef">${r.coef.toFixed(2)}<span class="pct">%</span></span></div>`;
+  }).join("");
+  document.getElementById("resultCard").style.display="";
+  document.getElementById("resultCard").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+// ===== 種雄牛管理 =====
+function renderBulls(){
+  document.getElementById("bullChips").innerHTML=BULLS.map((b,i)=>`<span class="chip">${esc(b.name)}<button onclick="removeBull(${i})">×</button></span>`).join("")
+    || `<div class="hint">種雄牛がありません。「初期に戻す」か「追加」してください。</div>`;
+}
+function removeBull(i){ BULLS.splice(i,1); renderBulls(); saveCloud(); }
+function resetBulls(){ if(!confirm("種雄牛リストを初期状態（28頭）に戻しますか？"))return; BULLS=EMBED.initBulls.slice(); renderBulls(); saveCloud(); toast("初期に戻しました"); }
+
+function openAddBull(){ ["nb-name","nb-yomi","nb-s1","nb-s1n","nb-s2","nb-s2n","nb-s3","nb-s3n","nb-s4","nb-s4n","nb-f"].forEach(id=>document.getElementById(id).value=""); openModal("addBullModal"); }
+function saveNewBull(){
+  const name=val("nb-name"),yomi=val("nb-yomi");
+  if(!name||!yomi){ toast("名号と読みを入力してください"); return; }
+  addToMaster({name,yomi,f:parseFloat(val("nb-f"))||"",
+    s1y:val("nb-s1"),s1:val("nb-s1n"),s2y:val("nb-s2"),s2:val("nb-s2n"),
+    s3y:val("nb-s3"),s3:val("nb-s3n"),s4y:val("nb-s4"),s4:val("nb-s4n")});
+  if(!BULLS.some(x=>x.yomi===yomi))BULLS.push({name,yomi});
+  rebuildEngine(); rebuildK2Y(); renderBulls(); saveCloud(); closeModal("addBullModal");
+  toast(name+" を追加しました");
+}
+
+// ===== オートコンプリート（読み・漢字どちらでも）=====
+function setupAC(id){ const inp=document.getElementById(id),wrap=inp.parentNode;
+  inp.addEventListener("input",()=>showAC(inp,wrap));
+  inp.addEventListener("focus",()=>{if(inp.value)showAC(inp,wrap);});
+  inp.addEventListener("blur",()=>setTimeout(()=>{const l=wrap.querySelector(".ac-list");if(l)l.remove();},200)); }
+function showAC(inp,wrap){ const old=wrap.querySelector(".ac-list");if(old)old.remove();
+  const q=inp.value.trim(); if(!q)return; const ql=q.toLowerCase();
+  const hits=NAMES.filter(n=>(n.yomi&&n.yomi.toLowerCase().includes(ql))||(n.name&&n.name.includes(q))).slice(0,8);
+  if(!hits.length)return;
+  const list=document.createElement("div");list.className="ac-list";
+  list.innerHTML=hits.map(n=>`<div class="ac-item" data-y="${esc(n.yomi)}" data-n="${esc(n.name)}"><span class="n">${esc(n.name)}</span><span class="y">${esc(n.yomi)}</span></div>`).join("");
+  list.querySelectorAll(".ac-item").forEach(it=>it.addEventListener("mousedown",e=>{ e.preventDefault();
+    inp.value=it.dataset.n; // 表示は漢字
+    const nm=inp.id.replace(/^nb-s(\d)$/,"nb-s$1n"); if(nm!==inp.id){const ne=document.getElementById(nm);if(ne)ne.value=it.dataset.n;}
+    // 読み欄なら読みをセット
+    if(/^nb-s\d$/.test(inp.id)) inp.value=it.dataset.y;
+    list.remove(); }));
+  wrap.appendChild(list);
+}
+
+function val(id){return document.getElementById(id).value.trim();}
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
+function openModal(id){document.getElementById(id).classList.add("open");}
+function closeModal(id){document.getElementById(id).classList.remove("open");}
+let toastT; function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),2200);}
+
+["s1","s2","s3","s4","nb-s1","nb-s2","nb-s3","nb-s4"].forEach(setupAC);
+renderBulls();
+</script>
+</body>
+</html>
