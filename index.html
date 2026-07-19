@@ -76,6 +76,10 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
 .status{font-size:11px;color:var(--ink2);text-align:center;padding:6px;}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 20px;border-radius:24px;font-size:14px;font-weight:700;z-index:200;opacity:0;transition:opacity .3s;box-shadow:var(--shadow);} .toast.show{opacity:1;}
 .small{font-size:12px;color:var(--ink2);}
+#existConfirm{margin-top:10px;background:#fff;border:2px solid var(--akane);border-radius:10px;padding:12px;}
+.ec-name{font-size:16px;font-weight:800;color:var(--akane-d);margin-bottom:8px;} .ec-name .ec-k{font-size:12px;color:var(--akane);border:1px solid var(--akane);border-radius:4px;padding:1px 6px;margin-left:6px;}
+.ec-ped{margin-bottom:10px;}
+.ec-btns{display:flex;gap:8px;} .ec-btns .btn{padding:11px;font-size:15px;}
 .v-msg{}
 .v-ped-btn{margin-top:10px;background:rgba(255,255,255,.6);border:1px solid currentColor;color:inherit;font-size:12px;font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer;}
 .v-ped{margin-top:10px;background:#fff;border-radius:10px;padding:10px 12px;text-align:left;color:var(--ink);}
@@ -111,6 +115,14 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
   <div class="card" id="resultCard" style="display:none;">
     <h2>③ 全種雄牛の一覧（近交係数の低い順）</h2>
     <div class="legend"><span class="r-safe">🟢 6.25%未満</span><span class="r-warn">🟡 6.25〜12.5%</span><span class="r-danger">🔴 12.5%以上</span></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input type="text" id="res-search" placeholder="名前・系統で検索" oninput="renderResults()" style="flex:1;font-size:15px;padding:10px;border:1.5px solid var(--line);border-radius:10px;">
+      <select id="res-filter" onchange="renderResults()" style="font-size:14px;padding:10px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-weight:700;">
+        <option value="all">すべて</option>
+        <option value="instock">在庫あり</option>
+        <option value="safe">安全のみ</option>
+      </select>
+    </div>
     <div id="results"></div>
   </div>
 
@@ -132,6 +144,7 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
     <div class="small" style="font-weight:700;color:var(--akane-d);margin-bottom:6px;">🔍 マスタに登録済みの牛から選ぶ（血統入力不要）</div>
     <div class="ac-wrap"><input type="text" id="nb-existing" autocomplete="off" placeholder="名前・読みで検索（例：光利）"></div>
     <div class="small" style="margin-top:4px;">既にマスタに血統がある牛は、検索して選ぶだけで②に追加できます。</div>
+    <div id="existConfirm" style="display:none;"></div>
   </div>
   <div class="small" style="text-align:center;color:var(--ink2);margin-bottom:10px;">── または、新しい牛を血統ごと登録 ──</div>
   <p class="small">血統は<b>漢字を入れるだけ</b>でOK（読みは自動）。父・母の父・母の母の父まで入れれば、その先はマスタが自動でたどります。系統は父から自動判定。</p>
@@ -452,23 +465,36 @@ function togglePed(e,yomi,name){ e.stopPropagation(); const p=document.getElemen
   else { p.style.display="none"; e.target.textContent="▼ "+name+"の血統を見る"; }
 }
 
+let _allRows=[]; // ③の全結果を保持（検索用）
 function calcAll(){
   if(!curFemale){ toast("先に母牛を選んでください"); return; }
-  // ③はマスタに血統が登録されている全種雄牛を対象（在庫の有無に関係なく）
   const stockMap={}; SEMEN.forEach(s=>{const y=toYomi(s.name); if(y)stockMap[y]=s.stock;});
-  const rows=[];
+  _allRows=[];
   for(let i=0;i<MC.A.length;i++){ const y=MC.A[i], nm=MC.B[i]||y;
-    rows.push({name:nm,yomi:y,stock:stockMap[y]||0,coef:engine.compute(curFemale.s1,curFemale.s2,curFemale.s3,curFemale.s4,y)});
+    _allRows.push({name:nm,yomi:y,stock:stockMap[y]||0,keitou:keitouOf(nm,y),coef:engine.compute(curFemale.s1,curFemale.s2,curFemale.s3,curFemale.s4,y)});
   }
-  rows.sort((a,b)=>a.coef-b.coef);
-  document.getElementById("results").innerHTML=
-    '<div class="hint">マスタに血統がある全'+rows.length+'頭を近交係数の低い順に表示（🐂＝精液在庫あり）</div>'
-    +rows.map((r,i)=>{ let cls="r-safe",tag="安全";
-    if(r.coef>=12.5){cls="r-danger";tag="危険";}else if(r.coef>=6.25){cls="r-warn";tag="注意";}
-    return '<div class="result-row '+cls+'"><span class="rank">'+(i+1)+'</span><span class="bull">'+(r.stock?'🐂 ':'')+esc(r.name)+(r.stock?'<span class="yomi">在庫'+r.stock+'本</span>':'')+'</span><span class="tag">'+tag+'</span><span class="coef">'+r.coef.toFixed(2)+'<span class="pct">%</span></span></div>';
-  }).join("");
+  _allRows.sort((a,b)=>a.coef-b.coef);
   document.getElementById("resultCard").style.display="";
+  document.getElementById("res-search").value="";
+  document.getElementById("res-filter").value="all";
+  renderResults();
   document.getElementById("resultCard").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function renderResults(){
+  const q=(document.getElementById("res-search").value||"").trim().toLowerCase();
+  const fil=document.getElementById("res-filter").value;
+  let rows=_allRows.filter(r=>{
+    if(fil==="instock"&&!r.stock)return false;
+    if(fil==="safe"&&r.coef>=6.25)return false;
+    if(q && !(r.name.toLowerCase().indexOf(q)>=0 || (r.yomi&&r.yomi.toLowerCase().indexOf(q)>=0) || (r.keitou&&r.keitou.indexOf(q)>=0)))return false;
+    return true;
+  });
+  document.getElementById("results").innerHTML=
+    '<div class="hint">'+rows.length+'頭を表示（🐂＝精液在庫あり）</div>'
+    +rows.map(r=>{ const i=_allRows.indexOf(r); let cls="r-safe",tag="安全";
+    if(r.coef>=12.5){cls="r-danger";tag="危険";}else if(r.coef>=6.25){cls="r-warn";tag="注意";}
+    return '<div class="result-row '+cls+'"><span class="rank">'+(i+1)+'</span><span class="bull">'+(r.stock?'🐂 ':'')+esc(r.name)+' <span class="yomi">'+esc(r.keitou)+(r.stock?'・在庫'+r.stock+'本':'')+'</span></span><span class="tag">'+tag+'</span><span class="coef">'+r.coef.toFixed(2)+'<span class="pct">%</span></span></div>';
+  }).join("") || '<div class="empty">該当なし</div>';
 }
 
 // ===== 種雄牛の追加・削除 =====
@@ -536,10 +562,25 @@ function showExistAC(inp,wrap){ const old=wrap.querySelector(".ac-list");if(old)
     return '<div class="ac-item" data-y="'+esc(n.yomi)+'" data-n="'+esc(n.name)+'"><span class="n">'+esc(n.name)+'</span><span class="y">'+esc(n.yomi)+'</span><span class="tag2">'+esc(k)+'</span></div>'; }).join("");
   list.querySelectorAll(".ac-item").forEach(it=>it.addEventListener("mousedown",e=>{ e.preventDefault();
     const nm=it.dataset.n, y=it.dataset.y;
-    if(!BULLS.some(b=>b.yomi===y))BULLS.push({name:nm,yomi:y});
-    renderBulls(); saveCloud(); closeModal("addBullModal");
-    toast(nm+"（"+keitouOf(nm,y)+"）を追加しました"); }));
+    confirmAddExisting(nm,y); }));
   wrap.appendChild(list); }
+// マスタから選んだ牛を、血統を確認してから追加
+function confirmAddExisting(nm,y){
+  const ped=pedigreeHtml(y);
+  const box=document.getElementById("existConfirm");
+  box.innerHTML='<div class="ec-name">'+esc(nm)+' <span class="ec-k">'+esc(keitouOf(nm,y))+'</span></div>'
+    +'<div class="ec-ped">'+ped+'</div>'
+    +'<div class="ec-btns"><button class="btn sec" onclick="closeExistConfirm()">やめる</button>'
+    +'<button class="btn" onclick="doAddExisting(\''+esc(nm).replace(/\'/g,"")+'\',\''+esc(y)+'\')">この牛を追加</button></div>';
+  box.style.display="block";
+  document.getElementById("nb-existing").value=nm;
+}
+function closeExistConfirm(){ const b=document.getElementById("existConfirm"); if(b){b.style.display="none";b.innerHTML="";} document.getElementById("nb-existing").value=""; }
+function doAddExisting(nm,y){
+  if(!BULLS.some(b=>b.yomi===y))BULLS.push({name:nm,yomi:y});
+  renderBulls(); saveCloud(); closeExistConfirm(); closeModal("addBullModal");
+  toast(nm+"（"+keitouOf(nm,y)+"）を追加しました");
+}
 renderBulls();
 
 </script>
