@@ -140,16 +140,9 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
 
 <div class="modal-bg" id="addBullModal"><div class="modal"><button class="x" onclick="closeModal('addBullModal')">×</button>
   <h2>新しい種雄牛を追加</h2>
-  <div style="background:var(--warn-bg);border:1.5px solid #ecd6a3;border-radius:10px;padding:12px;margin-bottom:14px;">
-    <div class="small" style="font-weight:700;color:var(--akane-d);margin-bottom:6px;">🔍 マスタに登録済みの牛から選ぶ（血統入力不要）</div>
-    <div class="ac-wrap"><input type="text" id="nb-existing" autocomplete="off" placeholder="名前・読みで検索（例：光利）"></div>
-    <div class="small" style="margin-top:4px;">既にマスタに血統がある牛は、検索して選ぶだけで②に追加できます。</div>
-    <div id="existConfirm" style="display:none;"></div>
-  </div>
-  <div class="small" style="text-align:center;color:var(--ink2);margin-bottom:10px;">── または、新しい牛を血統ごと登録 ──</div>
-  <p class="small">血統は<b>漢字を入れるだけ</b>でOK（読みは自動）。父・母の父・母の母の父まで入れれば、その先はマスタが自動でたどります。系統は父から自動判定。</p>
-  <label class="fld"><span class="lb">名号（漢字）</span><input type="text" id="nb-name" placeholder="例：幸弦光"></label>
-  <label class="fld"><span class="lb">読み（ひらがな）※この牛の読みだけ入力</span><input type="text" id="nb-yomi" placeholder="例：ゆきつるみつ"></label>
+  <p class="small">名号（漢字）を入れると、<b>マスタにある牛は血統が自動で埋まります</b>（間違いがあれば修正可）。マスタに無い牛は、血統を手入力してください。父・母の父・母の母の父まで入れれば、その先は自動でたどります。系統は父から自動判定。</p>
+  <label class="fld"><span class="lb">名号（漢字）</span><div class="ac-wrap"><input type="text" id="nb-name" autocomplete="off" placeholder="例：弦幸／幸弦光"></div><span class="ystat" id="yst-name"></span></label>
+  <label class="fld"><span class="lb">読み（ひらがな）</span><input type="text" id="nb-yomi" placeholder="例：つるゆき"></label>
   <div class="small" style="margin:8px 0;font-weight:700;color:var(--akane-d);">血統（漢字を入力／候補から選択）</div>
   <label class="fld"><span class="lb">父（一代祖）</span><div class="ac-wrap"><input type="text" id="nb-s1n" autocomplete="off" placeholder="例：幸泉"></div><span class="ystat" id="yst-s1"></span></label>
   <label class="fld"><span class="lb">母の父（二代祖）</span><div class="ac-wrap"><input type="text" id="nb-s2n" autocomplete="off" placeholder="例：第四弦光"></div><span class="ystat" id="yst-s2"></span></label>
@@ -498,8 +491,8 @@ function renderResults(){
 }
 
 // ===== 種雄牛の追加・削除 =====
-function openAddBull(){ ["nb-existing","nb-name","nb-yomi","nb-s1","nb-s1n","nb-s2","nb-s2n","nb-s3","nb-s3n","nb-s4","nb-s4n","nb-f"].forEach(id=>document.getElementById(id).value="");
-  ["s1","s2","s3","s4"].forEach(k=>{const e=document.getElementById("yst-"+k);if(e)e.textContent="";}); openModal("addBullModal"); }
+function openAddBull(){ ["nb-name","nb-yomi","nb-s1","nb-s1n","nb-s2","nb-s2n","nb-s3","nb-s3n","nb-s4","nb-s4n","nb-f"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
+  ["s1","s2","s3","s4","name"].forEach(k=>{const e=document.getElementById("yst-"+k);if(e)e.textContent="";}); openModal("addBullModal"); }
 // 祖先の漢字欄が変わったら、読みを自動で埋める（マスタ逆引き）＋状態表示
 function updAncYomi(slot){
   const kanji=val("nb-s"+slot+"n"); const y=kanji?toYomi(kanji):"";
@@ -547,39 +540,27 @@ function closeModal(id){document.getElementById(id).classList.remove("open");}
 let toastT; function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),2200);}
 
 ["nb-s1n","nb-s2n","nb-s3n","nb-s4n"].forEach(setupAC);
-// マスタ登録済みの牛を検索して②に追加
-(function(){ const inp=document.getElementById("nb-existing"); if(!inp)return; const wrap=inp.parentNode;
-  inp.addEventListener("input",()=>showExistAC(inp,wrap));
-  inp.addEventListener("focus",()=>{if(inp.value)showExistAC(inp,wrap);});
-  inp.addEventListener("blur",()=>setTimeout(()=>{const l=wrap.querySelector(".ac-list");if(l)l.remove();},200)); })();
-function showExistAC(inp,wrap){ const old=wrap.querySelector(".ac-list");if(old)old.remove(); const q=inp.value.trim();if(!q)return; const ql=q.toLowerCase();
-  // マスタにある牛（血統あり）で、まだ②に無いもの
-  const hits=NAMES.filter(n=>{ if(BULLS.some(b=>b.yomi===n.yomi))return false; const mi=MC.A.indexOf(n.yomi); if(mi<0)return false;
-    return (n.name&&n.name.indexOf(q)>=0)||(n.yomi&&n.yomi.toLowerCase().indexOf(ql)>=0); }).slice(0,10);
-  if(!hits.length)return;
+// 名号入力→マスタにあれば血統を自動流し込み（編集可）
+(function(){ const inp=document.getElementById("nb-name"); if(!inp)return; const wrap=inp.parentNode;
+  inp.addEventListener("input",()=>showNameAC(inp,wrap));
+  inp.addEventListener("focus",()=>{if(inp.value)showNameAC(inp,wrap);});
+  inp.addEventListener("blur",()=>setTimeout(()=>{const l=wrap.querySelector(".ac-list");if(l)l.remove(); checkNameInMaster();},250)); })();
+function showNameAC(inp,wrap){ const old=wrap.querySelector(".ac-list");if(old)old.remove(); const q=inp.value.trim();if(!q)return; const ql=q.toLowerCase();
+  const hits=NAMES.filter(n=>(n.name&&n.name.indexOf(q)>=0)||(n.yomi&&n.yomi.toLowerCase().indexOf(ql)>=0)).slice(0,8); if(!hits.length)return;
   const list=document.createElement("div");list.className="ac-list";
-  list.innerHTML=hits.map(n=>{ const k=keitouOf(n.name,n.yomi);
-    return '<div class="ac-item" data-y="'+esc(n.yomi)+'" data-n="'+esc(n.name)+'"><span class="n">'+esc(n.name)+'</span><span class="y">'+esc(n.yomi)+'</span><span class="tag2">'+esc(k)+'</span></div>'; }).join("");
+  list.innerHTML=hits.map(n=>{const k=keitouOf(n.name,n.yomi);
+    return '<div class="ac-item" data-y="'+esc(n.yomi)+'" data-n="'+esc(n.name)+'"><span class="n">'+esc(n.name)+'</span><span class="y">'+esc(n.yomi)+'</span><span class="tag2">'+esc(k)+'</span></div>';}).join("");
   list.querySelectorAll(".ac-item").forEach(it=>it.addEventListener("mousedown",e=>{ e.preventDefault();
-    const nm=it.dataset.n, y=it.dataset.y;
-    confirmAddExisting(nm,y); }));
+    inp.value=it.dataset.n; document.getElementById("nb-yomi").value=it.dataset.y;
+    fillPedFromMaster(it.dataset.y); list.remove(); }));
   wrap.appendChild(list); }
-// マスタから選んだ牛を、血統を確認してから追加
-function confirmAddExisting(nm,y){
-  const ped=pedigreeHtml(y);
-  const box=document.getElementById("existConfirm");
-  box.innerHTML='<div class="ec-name">'+esc(nm)+' <span class="ec-k">'+esc(keitouOf(nm,y))+'</span></div>'
-    +'<div class="ec-ped">'+ped+'</div>'
-    +'<div class="ec-btns"><button class="btn sec" onclick="closeExistConfirm()">やめる</button>'
-    +'<button class="btn" onclick="doAddExisting(\''+esc(nm).replace(/\'/g,"")+'\',\''+esc(y)+'\')">この牛を追加</button></div>';
-  box.style.display="block";
-  document.getElementById("nb-existing").value=nm;
-}
-function closeExistConfirm(){ const b=document.getElementById("existConfirm"); if(b){b.style.display="none";b.innerHTML="";} document.getElementById("nb-existing").value=""; }
-function doAddExisting(nm,y){
-  if(!BULLS.some(b=>b.yomi===y))BULLS.push({name:nm,yomi:y});
-  renderBulls(); saveCloud(); closeExistConfirm(); closeModal("addBullModal");
-  toast(nm+"（"+keitouOf(nm,y)+"）を追加しました");
+// 名号がマスタにあれば血統を流し込む
+function checkNameInMaster(){ const nm=val("nb-name"); if(!nm)return; const y=K2Y[nm]; if(y&&MC.A.indexOf(y)>=0){ if(!val("nb-yomi"))document.getElementById("nb-yomi").value=y; fillPedFromMaster(y); } }
+function fillPedFromMaster(y){ const m=getMasterByYomi(y); const st=document.getElementById("yst-name");
+  if(!m){ if(st){st.textContent="";} return; }
+  const set=(slot,ny,nn)=>{ document.getElementById("nb-s"+slot+"n").value=nn||""; document.getElementById("nb-s"+slot).value=ny||""; if(typeof updAncYomi==="function"&&nn)updAncYomi(slot); };
+  set(1,m.s1y,m.s1); set(2,m.s2y,m.s2); set(3,m.s3y,m.s3); set(4,m.s4y,m.s4);
+  if(st){ st.textContent="✓ マスタにある牛です。血統を自動入力しました（修正可）"; st.className="ystat ok"; }
 }
 renderBulls();
 
