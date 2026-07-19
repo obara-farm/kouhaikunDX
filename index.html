@@ -76,6 +76,7 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
 .status{font-size:11px;color:var(--ink2);text-align:center;padding:6px;}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 20px;border-radius:24px;font-size:14px;font-weight:700;z-index:200;opacity:0;transition:opacity .3s;box-shadow:var(--shadow);} .toast.show{opacity:1;}
 .small{font-size:12px;color:var(--ink2);}
+.ystat{font-size:11px;font-weight:700;display:block;margin-top:3px;} .ystat.ok{color:var(--safe);} .ystat.ng{color:var(--danger);}
 </style>
 </head>
 <body>
@@ -116,20 +117,15 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
   <button class="btn sec" onclick="closeModal('manageModal');openAddBull();">＋ 新しい種雄牛を追加</button></div></div>
 
 <div class="modal-bg" id="addBullModal"><div class="modal"><button class="x" onclick="closeModal('addBullModal')">×</button>
-  <h2>新しい種雄牛を追加</h2><p class="small">名前と4代祖の血統を入力。系統は父から自動判定されます。追加すると次回から自動で使えます。</p>
-  <label class="fld"><span class="lb">名号（漢字）</span><input type="text" id="nb-name" placeholder="例：新重川"></label>
-  <label class="fld"><span class="lb">読み（ひらがな）</span><input type="text" id="nb-yomi" placeholder="例：しんしげかわ"></label>
-  <div class="small" style="margin:6px 0;font-weight:700;color:var(--akane-d);">血統（4代祖）— 読みで入力すると候補が出ます</div>
-  <div class="pair">
-    <label class="fld"><span class="lb">父（読み）</span><div class="ac-wrap"><input type="text" id="nb-s1" autocomplete="off"></div></label>
-    <label class="fld"><span class="lb">父（漢字）</span><input type="text" id="nb-s1n"></label>
-    <label class="fld"><span class="lb">母の父（読み）</span><div class="ac-wrap"><input type="text" id="nb-s2" autocomplete="off"></div></label>
-    <label class="fld"><span class="lb">母の父（漢字）</span><input type="text" id="nb-s2n"></label>
-    <label class="fld"><span class="lb">母の母の父（読み）</span><div class="ac-wrap"><input type="text" id="nb-s3" autocomplete="off"></div></label>
-    <label class="fld"><span class="lb">母の母の父（漢字）</span><input type="text" id="nb-s3n"></label>
-    <label class="fld"><span class="lb">母の母の母の父（読み）</span><div class="ac-wrap"><input type="text" id="nb-s4" autocomplete="off"></div></label>
-    <label class="fld"><span class="lb">母の母の母の父（漢字）</span><input type="text" id="nb-s4n"></label>
-  </div>
+  <h2>新しい種雄牛を追加</h2><p class="small">血統は<b>漢字を入れるだけ</b>でOK（読みは自動）。父・母の父・母の母の父まで入れれば、その先はマスタが自動でたどります。系統は父から自動判定。</p>
+  <label class="fld"><span class="lb">名号（漢字）</span><input type="text" id="nb-name" placeholder="例：幸弦光"></label>
+  <label class="fld"><span class="lb">読み（ひらがな）※この牛の読みだけ入力</span><input type="text" id="nb-yomi" placeholder="例：ゆきつるみつ"></label>
+  <div class="small" style="margin:8px 0;font-weight:700;color:var(--akane-d);">血統（漢字を入力／候補から選択）</div>
+  <label class="fld"><span class="lb">父（一代祖）</span><div class="ac-wrap"><input type="text" id="nb-s1n" autocomplete="off" placeholder="例：幸泉"></div><span class="ystat" id="yst-s1"></span></label>
+  <label class="fld"><span class="lb">母の父（二代祖）</span><div class="ac-wrap"><input type="text" id="nb-s2n" autocomplete="off" placeholder="例：第四弦光"></div><span class="ystat" id="yst-s2"></span></label>
+  <label class="fld"><span class="lb">母の母の父（三代祖）</span><div class="ac-wrap"><input type="text" id="nb-s3n" autocomplete="off" placeholder="例：第三光重"></div><span class="ystat" id="yst-s3"></span></label>
+  <label class="fld"><span class="lb">母の母の母の父（四代祖・任意）</span><div class="ac-wrap"><input type="text" id="nb-s4n" autocomplete="off" placeholder="不明なら空欄"></div><span class="ystat" id="yst-s4"></span></label>
+  <input type="hidden" id="nb-s1"><input type="hidden" id="nb-s2"><input type="hidden" id="nb-s3"><input type="hidden" id="nb-s4">
   <label class="fld"><span class="lb">この牛自身の近交係数（％・わかれば）</span><input type="text" id="nb-f" placeholder="不明なら空欄"></label>
   <button class="btn" onclick="saveNewBull()">追加して保存</button></div></div>
 
@@ -429,8 +425,20 @@ function calcAll(){
 }
 
 // ===== 種雄牛の追加・削除 =====
-function openAddBull(){ ["nb-name","nb-yomi","nb-s1","nb-s1n","nb-s2","nb-s2n","nb-s3","nb-s3n","nb-s4","nb-s4n","nb-f"].forEach(id=>document.getElementById(id).value=""); openModal("addBullModal"); }
-function saveNewBull(){ const name=val("nb-name"),yomi=val("nb-yomi"); if(!name||!yomi){toast("名号と読みを入力してください");return;}
+function openAddBull(){ ["nb-name","nb-yomi","nb-s1","nb-s1n","nb-s2","nb-s2n","nb-s3","nb-s3n","nb-s4","nb-s4n","nb-f"].forEach(id=>document.getElementById(id).value="");
+  ["s1","s2","s3","s4"].forEach(k=>{const e=document.getElementById("yst-"+k);if(e)e.textContent="";}); openModal("addBullModal"); }
+// 祖先の漢字欄が変わったら、読みを自動で埋める（マスタ逆引き）＋状態表示
+function updAncYomi(slot){
+  const kanji=val("nb-s"+slot+"n"); const y=kanji?toYomi(kanji):"";
+  document.getElementById("nb-s"+slot).value = (kanji&&MC.A.indexOf(y)>=0)? y : "";
+  const st=document.getElementById("yst-s"+slot);
+  if(!kanji){ st.textContent=""; return; }
+  if(MC.A.indexOf(y)>=0){ st.textContent="✓ "+y; st.className="ystat ok"; }
+  else { st.textContent="⚠ マスタ未登録（この牛以降はたどれません）"; st.className="ystat ng"; }
+}
+function saveNewBull(){ const name=val("nb-name"),yomi=val("nb-yomi"); if(!name||!yomi){toast("名号と読み（この牛の読み）を入力してください");return;}
+  // 祖先の読みは漢字から自動導出
+  ["1","2","3","4"].forEach(i=>{ const kj=val("nb-s"+i+"n"); document.getElementById("nb-s"+i).value = kj?toYomi(kj):""; });
   addToMaster({name,yomi,f:parseFloat(val("nb-f"))||"",s1y:val("nb-s1"),s1:val("nb-s1n"),s2y:val("nb-s2"),s2:val("nb-s2n"),s3y:val("nb-s3"),s3:val("nb-s3n"),s4y:val("nb-s4"),s4:val("nb-s4n")});
   if(!BULLS.some(x=>x.yomi===yomi))BULLS.push({name,yomi});
   rebuildEngine();rebuildK2Y();renderBulls();saveCloud();closeModal("addBullModal");
@@ -442,17 +450,21 @@ function openManage(){ const map={}; SEMEN.forEach(s=>{map[s.name]={name:s.name,
 function removeBull(name){ BULLS=BULLS.filter(b=>b.name!==name); saveCloud(); openManage(); renderBulls(); }
 function resetBulls(){ if(!confirm("種雄牛リストを初期状態に戻しますか？"))return; BULLS=EMBED.initBulls.slice(); saveCloud(); renderBulls(); openManage(); toast("初期に戻しました"); }
 
-// ===== オートコンプリート =====
+// ===== オートコンプリート（祖先の漢字欄用）=====
 function setupAC(id){ const inp=document.getElementById(id),wrap=inp.parentNode;
-  inp.addEventListener("input",()=>showAC(inp,wrap)); inp.addEventListener("focus",()=>{if(inp.value)showAC(inp,wrap);});
-  inp.addEventListener("blur",()=>setTimeout(()=>{const l=wrap.querySelector(".ac-list");if(l)l.remove();},200)); }
+  const slot=(id.match(/nb-s(\d)n/)||[])[1];
+  inp.addEventListener("input",()=>{ showAC(inp,wrap); if(slot)updAncYomi(slot); });
+  inp.addEventListener("focus",()=>{if(inp.value)showAC(inp,wrap);});
+  inp.addEventListener("blur",()=>setTimeout(()=>{const l=wrap.querySelector(".ac-list");if(l)l.remove(); if(slot)updAncYomi(slot);},200)); }
 function showAC(inp,wrap){ const old=wrap.querySelector(".ac-list");if(old)old.remove(); const q=inp.value.trim();if(!q)return; const ql=q.toLowerCase();
-  const hits=NAMES.filter(n=>(n.yomi&&n.yomi.toLowerCase().indexOf(ql)>=0)||(n.name&&n.name.indexOf(q)>=0)).slice(0,8); if(!hits.length)return;
+  const hits=NAMES.filter(n=>(n.name&&n.name.indexOf(q)>=0)||(n.yomi&&n.yomi.toLowerCase().indexOf(ql)>=0)).slice(0,8); if(!hits.length)return;
   const list=document.createElement("div");list.className="ac-list";
   list.innerHTML=hits.map(n=>'<div class="ac-item" data-y="'+esc(n.yomi)+'" data-n="'+esc(n.name)+'"><span class="n">'+esc(n.name)+'</span><span class="y">'+esc(n.yomi)+'</span></div>').join("");
   list.querySelectorAll(".ac-item").forEach(it=>it.addEventListener("mousedown",e=>{ e.preventDefault();
-    const nmField=inp.id.replace(/^nb-s(\d)$/,"nb-s$1n"); if(nmField!==inp.id){const ne=document.getElementById(nmField);if(ne)ne.value=it.dataset.n;}
-    inp.value=/^nb-s\d$/.test(inp.id)?it.dataset.y:it.dataset.n; list.remove(); }));
+    inp.value=it.dataset.n; // 漢字を入れる
+    const slot=(inp.id.match(/nb-s(\d)n/)||[])[1];
+    if(slot){ document.getElementById("nb-s"+slot).value=it.dataset.y; updAncYomi(slot); }
+    list.remove(); }));
   wrap.appendChild(list); }
 
 function val(id){return document.getElementById(id).value.trim();}
@@ -461,7 +473,7 @@ function openModal(id){document.getElementById(id).classList.add("open");}
 function closeModal(id){document.getElementById(id).classList.remove("open");}
 let toastT; function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),2200);}
 
-["nb-s1","nb-s2","nb-s3","nb-s4"].forEach(setupAC);
+["nb-s1n","nb-s2n","nb-s3n","nb-s4n"].forEach(setupAC);
 renderBulls();
 
 </script>
