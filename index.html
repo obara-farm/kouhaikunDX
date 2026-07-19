@@ -72,7 +72,7 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
 .searchbar{width:100%;font-size:17px;padding:13px;border:1.5px solid var(--akane);border-radius:10px;margin-bottom:10px;}
 .picklist{max-height:60vh;overflow-y:auto;} .pick-item{padding:13px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:16px;display:flex;justify-content:space-between;align-items:center;} .pick-item:active{background:var(--warn-bg);} .pick-item .sub{font-size:12px;color:var(--ink2);}
 .chip{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1.5px solid var(--line);border-radius:20px;padding:5px 6px 5px 12px;font-size:13px;font-weight:700;margin:0 6px 6px 0;}
-.chip .src{font-size:10px;color:var(--ink2);font-weight:400;} .chip button{background:none;border:none;color:var(--danger);font-size:17px;cursor:pointer;padding:0 4px;line-height:1;}
+.chip .src{font-size:10px;color:var(--ink2);font-weight:400;} .chip button{background:none;border:none;color:var(--danger);font-size:17px;cursor:pointer;padding:0 4px;line-height:1;} .chip button.edit{color:var(--akane);font-size:14px;}
 .status{font-size:11px;color:var(--ink2);text-align:center;padding:6px;}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 20px;border-radius:24px;font-size:14px;font-weight:700;z-index:200;opacity:0;transition:opacity .3s;box-shadow:var(--shadow);} .toast.show{opacity:1;}
 .small{font-size:12px;color:var(--ink2);}
@@ -139,7 +139,7 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
   <button class="btn sec" onclick="closeModal('manageModal');openAddBull();">＋ 新しい種雄牛を追加</button></div></div>
 
 <div class="modal-bg" id="addBullModal"><div class="modal"><button class="x" onclick="closeModal('addBullModal')">×</button>
-  <h2>新しい種雄牛を追加</h2>
+  <h2 id="addBullTitle">新しい種雄牛を追加</h2>
   <p class="small">名号（漢字）を入れると、<b>マスタにある牛は血統が自動で埋まります</b>（間違いがあれば修正可）。マスタに無い牛は、血統を手入力してください。父・母の父・母の母の父まで入れれば、その先は自動でたどります。系統は父から自動判定。</p>
   <label class="fld"><span class="lb">名号（漢字）</span><div class="ac-wrap"><input type="text" id="nb-name" autocomplete="off" placeholder="例：弦幸／幸弦光"></div><span class="ystat" id="yst-name"></span></label>
   <label class="fld"><span class="lb">読み（ひらがな）</span><input type="text" id="nb-yomi" placeholder="例：つるゆき"></label>
@@ -150,7 +150,7 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
   <label class="fld"><span class="lb">母の母の母の父（四代祖・任意）</span><div class="ac-wrap"><input type="text" id="nb-s4n" autocomplete="off" placeholder="不明なら空欄"></div><span class="ystat" id="yst-s4"></span></label>
   <input type="hidden" id="nb-s1"><input type="hidden" id="nb-s2"><input type="hidden" id="nb-s3"><input type="hidden" id="nb-s4">
   <label class="fld"><span class="lb">この牛自身の近交係数（％・わかれば）</span><input type="text" id="nb-f" placeholder="不明なら空欄"></label>
-  <button class="btn" onclick="saveNewBull()">追加して保存</button></div></div>
+  <button class="btn" id="addBullBtn" onclick="saveNewBull()">追加して保存</button></div></div>
 
 <div class="toast" id="toast"></div>
 <script>
@@ -353,14 +353,23 @@ function loadSemen(){ if(!semRef)return; semRef.once("value").then(s=>{ let v=s.
   SEMEN=(v||[]).filter(x=>x&&x.name&&x.breed==="褐毛"&&(x.stock||0)>0).map(x=>({name:x.name,stock:x.stock||0,regNo:x.regNo||""}));
   updStatus(); renderBulls(); }).catch(()=>{}); }
 function updStatus(){ setStatus("✓ 在籍牛"+COWS.length+"頭・精液在庫"+SEMEN.length+"種 同期"); }
+let MASTER_EDITS={}; // 編集した牛の血統（yomi -> {name,f,s1y,s1,...}）koubaiに保存
 function loadCloud(){ if(!kref)return; kref.once("value").then(s=>{ let d=s.val(); if(typeof d==="string"){try{d=JSON.parse(d);}catch(e){d=null;}}
-  if(d){ if(Array.isArray(d.bulls))BULLS=d.bulls; if(Array.isArray(d.addedMaster)){d.addedMaster.forEach(m=>addToMaster(m,true));rebuildEngine();rebuildK2Y();} }
-  // 埋め込みの追加種雄牛（幸弦光・菊波泉ET・重波弦ET等）は常に②に出す
+  if(d){ if(Array.isArray(d.bulls))BULLS=d.bulls; if(Array.isArray(d.addedMaster)){d.addedMaster.forEach(m=>addToMaster(m,true));}
+    if(d.masterEdits&&typeof d.masterEdits==="object"){ MASTER_EDITS=d.masterEdits; Object.keys(MASTER_EDITS).forEach(y=>applyMasterEdit(y,MASTER_EDITS[y])); }
+    rebuildEngine();rebuildK2Y(); }
   (EMBED.initMasterAdd||[]).forEach(a=>{ if(!BULLS.some(b=>b.yomi===a.yomi))BULLS.push({name:a.name,yomi:a.yomi}); });
   renderBulls(); }).catch(()=>{}); }
 function saveCloud(){ if(!kref){renderBulls();return;} const initY=new Set(EMBED.names.map(n=>n.yomi)); const am=[];
-  for(let i=0;i<MC.A.length;i++){ if(!initY.has(MC.A[i]))am.push({yomi:MC.A[i],name:MC.B[i],f:MC.C[i],s1y:MC.D[i],s1:MC.E[i],s2y:MC.F[i],s2:MC.G[i],s3y:MC.H[i],s3:MC.I[i],s4y:MC.J[i],s4:MC.K[i]}); }
-  kref.set(JSON.stringify({bulls:BULLS,addedMaster:am})).then(()=>toast("保存しました")).catch(()=>toast("保存エラー")); }
+  for(let i=0;i<MC.A.length;i++){ if(!initY.has(MC.A[i])&&!(MC.A[i] in MASTER_EDITS))am.push({yomi:MC.A[i],name:MC.B[i],f:MC.C[i],s1y:MC.D[i],s1:MC.E[i],s2y:MC.F[i],s2:MC.G[i],s3y:MC.H[i],s3:MC.I[i],s4y:MC.J[i],s4:MC.K[i]}); }
+  kref.set(JSON.stringify({bulls:BULLS,addedMaster:am,masterEdits:MASTER_EDITS})).then(()=>toast("保存しました")).catch(()=>toast("保存エラー")); }
+// 編集内容をMCに反映（既存牛は上書き、無ければ追加）
+function applyMasterEdit(y,e){ let i=MC.A.indexOf(y);
+  if(i<0){ MC.A.push(y);MC.B.push("");MC.C.push("");MC.D.push("");MC.E.push("");MC.F.push("");MC.G.push("");MC.H.push("");MC.I.push("");MC.J.push("");MC.K.push(""); i=MC.A.length-1; }
+  MC.B[i]=e.name||"";MC.C[i]=(e.f==null||e.f==="")?"":e.f;
+  MC.D[i]=e.s1y||"";MC.E[i]=e.s1||"";MC.F[i]=e.s2y||"";MC.G[i]=e.s2||"";
+  MC.H[i]=e.s3y||"";MC.I[i]=e.s3||"";MC.J[i]=e.s4y||"";MC.K[i]=e.s4||"";
+  const ni=NAMES.findIndex(n=>n.yomi===y); if(ni>=0)NAMES[ni].name=e.name||y; else NAMES.push({yomi:y,name:e.name||y}); }
 
 function addToMaster(b,silent){ if(MC.A.indexOf(b.yomi)>=0)return;
   MC.A.push(b.yomi);MC.B.push(b.name||"");MC.C.push(b.f==null||b.f===""?"":b.f);
@@ -491,8 +500,11 @@ function renderResults(){
 }
 
 // ===== 種雄牛の追加・削除 =====
-function openAddBull(){ ["nb-name","nb-yomi","nb-s1","nb-s1n","nb-s2","nb-s2n","nb-s3","nb-s3n","nb-s4","nb-s4n","nb-f"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
-  ["s1","s2","s3","s4","name"].forEach(k=>{const e=document.getElementById("yst-"+k);if(e)e.textContent="";}); openModal("addBullModal"); }
+function openAddBull(){ _editYomi=null; ["nb-name","nb-yomi","nb-s1","nb-s1n","nb-s2","nb-s2n","nb-s3","nb-s3n","nb-s4","nb-s4n","nb-f"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
+  ["s1","s2","s3","s4","name"].forEach(k=>{const e=document.getElementById("yst-"+k);if(e)e.textContent="";});
+  document.getElementById("addBullTitle").textContent="新しい種雄牛を追加";
+  document.getElementById("addBullBtn").textContent="追加して保存";
+  document.getElementById("nb-yomi").readOnly=false; openModal("addBullModal"); }
 // 祖先の漢字欄が変わったら、読みを自動で埋める（マスタ逆引き）＋状態表示
 function updAncYomi(slot){
   const kanji=val("nb-s"+slot+"n"); const y=kanji?toYomi(kanji):"";
@@ -505,16 +517,41 @@ function updAncYomi(slot){
 function saveNewBull(){ const name=val("nb-name"),yomi=val("nb-yomi"); if(!name||!yomi){toast("名号と読み（この牛の読み）を入力してください");return;}
   // 祖先の読みは漢字から自動導出
   ["1","2","3","4"].forEach(i=>{ const kj=val("nb-s"+i+"n"); document.getElementById("nb-s"+i).value = kj?toYomi(kj):""; });
-  addToMaster({name,yomi,f:parseFloat(val("nb-f"))||"",s1y:val("nb-s1"),s1:val("nb-s1n"),s2y:val("nb-s2"),s2:val("nb-s2n"),s3y:val("nb-s3"),s3:val("nb-s3n"),s4y:val("nb-s4"),s4:val("nb-s4n")});
+  const rec={name,yomi,f:parseFloat(val("nb-f"))||"",s1y:val("nb-s1"),s1:val("nb-s1n"),s2y:val("nb-s2"),s2:val("nb-s2n"),s3y:val("nb-s3"),s3:val("nb-s3n"),s4y:val("nb-s4"),s4:val("nb-s4n")};
+  if(_editYomi){ // 編集モード：MASTER_EDITSに記録してMCへ反映
+    MASTER_EDITS[yomi]=rec; applyMasterEdit(yomi,rec);
+    rebuildEngine();rebuildK2Y();renderBulls();saveCloud();closeModal("addBullModal");
+    const k=keitouOf(name,yomi); toast(name+"（"+k+"）を修正しました"); _editYomi=null; return;
+  }
+  addToMaster(rec);
   if(!BULLS.some(x=>x.yomi===yomi))BULLS.push({name,yomi});
   rebuildEngine();rebuildK2Y();renderBulls();saveCloud();closeModal("addBullModal");
   const k=keitouOf(name,yomi); toast(name+"（"+k+"）を追加しました"); }
 function openManage(){ const map={}; SEMEN.forEach(s=>{map[s.name]={name:s.name,yomi:toYomi(s.name),src:"在庫"};}); BULLS.forEach(b=>{if(!map[b.name])map[b.name]={name:b.name,yomi:b.yomi,src:"登録"};});
   document.getElementById("manageList").innerHTML=Object.values(map).map(b=>{ const reg=BULLS.some(x=>x.name===b.name);
-    return '<div class="chip">'+esc(b.name)+'<span class="src">'+esc(b.src)+'</span>'+(reg?'<button onclick="removeBull(\''+esc(b.name).replace(/\'/g,"")+'\')">×</button>':'')+'</div>';
+    const canEdit=b.yomi&&MC.A.indexOf(b.yomi)>=0;
+    return '<div class="chip">'+esc(b.name)+'<span class="src">'+esc(b.src)+'</span>'
+      +(canEdit?'<button class="edit" onclick="editBull(\''+esc(b.yomi)+'\')" title="血統を編集">✎</button>':'')
+      +(reg?'<button onclick="removeBull(\''+esc(b.name).replace(/\'/g,"")+'\')">×</button>':'')+'</div>';
   }).join("")||'<div class="hint">なし</div>'; openModal("manageModal"); }
 function removeBull(name){ BULLS=BULLS.filter(b=>b.name!==name); saveCloud(); openManage(); renderBulls(); }
-function resetBulls(){ if(!confirm("種雄牛リストを初期状態に戻しますか？"))return; BULLS=EMBED.initBulls.slice(); saveCloud(); renderBulls(); openManage(); toast("初期に戻しました"); }
+function resetBulls(){ if(!confirm("種雄牛リストを初期状態に戻しますか？（追加・編集した血統も消えます）"))return; BULLS=EMBED.initBulls.slice(); MASTER_EDITS={}; saveCloud(); location.reload(); }
+// 既存の種雄牛の血統を編集（編集フォームを流用）
+let _editYomi=null;
+function editBull(yomi){ const m=getMasterByYomi(yomi); if(!m){toast("血統情報がありません");return;}
+  _editYomi=yomi;
+  document.getElementById("nb-name").value=m.name||"";
+  document.getElementById("nb-yomi").value=yomi;
+  document.getElementById("nb-s1n").value=m.s1||"";document.getElementById("nb-s1").value=m.s1y||"";
+  document.getElementById("nb-s2n").value=m.s2||"";document.getElementById("nb-s2").value=m.s2y||"";
+  document.getElementById("nb-s3n").value=m.s3||"";document.getElementById("nb-s3").value=m.s3y||"";
+  document.getElementById("nb-s4n").value=m.s4||"";document.getElementById("nb-s4").value=m.s4y||"";
+  document.getElementById("nb-f").value=(m.f==null||m.f==="")?"":m.f;
+  ["s1","s2","s3","s4","name"].forEach(k=>{const e=document.getElementById("yst-"+k);if(e)e.textContent="";});
+  document.getElementById("addBullTitle").textContent="種雄牛を編集";
+  document.getElementById("addBullBtn").textContent="修正を保存";
+  document.getElementById("nb-yomi").readOnly=true;
+  closeModal("manageModal"); openModal("addBullModal"); }
 
 // ===== オートコンプリート（祖先の漢字欄用）=====
 function setupAC(id){ const inp=document.getElementById(id),wrap=inp.parentNode;
