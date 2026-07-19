@@ -454,14 +454,18 @@ function togglePed(e,yomi,name){ e.stopPropagation(); const p=document.getElemen
 
 function calcAll(){
   if(!curFemale){ toast("先に母牛を選んでください"); return; }
-  const map={}; SEMEN.forEach(s=>{const y=toYomi(s.name);map[s.name]={name:s.name,yomi:y,stock:s.stock};});
-  BULLS.forEach(b=>{if(!map[b.name])map[b.name]={name:b.name,yomi:b.yomi,stock:0};});
-  const rows=Object.values(map).filter(b=>b.yomi&&MC.A.indexOf(b.yomi)>=0)
-    .map(b=>({name:b.name,stock:b.stock,coef:engine.compute(curFemale.s1,curFemale.s2,curFemale.s3,curFemale.s4,b.yomi)}));
+  // ③はマスタに血統が登録されている全種雄牛を対象（在庫の有無に関係なく）
+  const stockMap={}; SEMEN.forEach(s=>{const y=toYomi(s.name); if(y)stockMap[y]=s.stock;});
+  const rows=[];
+  for(let i=0;i<MC.A.length;i++){ const y=MC.A[i], nm=MC.B[i]||y;
+    rows.push({name:nm,yomi:y,stock:stockMap[y]||0,coef:engine.compute(curFemale.s1,curFemale.s2,curFemale.s3,curFemale.s4,y)});
+  }
   rows.sort((a,b)=>a.coef-b.coef);
-  document.getElementById("results").innerHTML=rows.map((r,i)=>{ let cls="r-safe",tag="安全";
+  document.getElementById("results").innerHTML=
+    '<div class="hint">マスタに血統がある全'+rows.length+'頭を近交係数の低い順に表示（🐂＝精液在庫あり）</div>'
+    +rows.map((r,i)=>{ let cls="r-safe",tag="安全";
     if(r.coef>=12.5){cls="r-danger";tag="危険";}else if(r.coef>=6.25){cls="r-warn";tag="注意";}
-    return '<div class="result-row '+cls+'"><span class="rank">'+(i+1)+'</span><span class="bull">'+esc(r.name)+(r.stock?'<span class="yomi">在庫'+r.stock+'本</span>':'')+'</span><span class="tag">'+tag+'</span><span class="coef">'+r.coef.toFixed(2)+'<span class="pct">%</span></span></div>';
+    return '<div class="result-row '+cls+'"><span class="rank">'+(i+1)+'</span><span class="bull">'+(r.stock?'🐂 ':'')+esc(r.name)+(r.stock?'<span class="yomi">在庫'+r.stock+'本</span>':'')+'</span><span class="tag">'+tag+'</span><span class="coef">'+r.coef.toFixed(2)+'<span class="pct">%</span></span></div>';
   }).join("");
   document.getElementById("resultCard").style.display="";
   document.getElementById("resultCard").scrollIntoView({behavior:"smooth",block:"start"});
