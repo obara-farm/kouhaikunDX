@@ -367,24 +367,37 @@ function loadFattening(){ if(!fatRef)return; fatRef.once("value").then(s=>{ let 
   FAT=(v||[]).filter(r=>r&&r.sire); computeSirePerf(); updStatus(); if(curFemale)renderBulls(); }).catch(()=>{}); }
 function qnum(mg){ const m=String(mg||"").match(/[1-5]/); return m?+m[0]:0; }
 function computeSirePerf(){
+  // 性別（去勢/未経産）ごとの枝重・歩留率の平均/SD（♂♀で水準が違うため性別内で評価）
+  const sexOf=r=>/去勢/.test(r.sex||"")?"M":/未経|雌|めす/.test(r.sex||"")?"F":"U";
+  const sexW={};
+  ["M","F","U"].forEach(sx=>{ const grp=FAT.filter(r=>sexOf(r)===sx);
+    const st=key=>{ const vals=grp.map(key).filter(v=>typeof v==="number"&&!isNaN(v));
+      const m=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
+      const sd=vals.length?Math.sqrt(vals.reduce((a,b)=>a+(b-m)*(b-m),0)/vals.length):0; return {m,sd}; };
+    sexW[sx]={w:st(r=>r.weight),y:st(r=>r.yieldRate)}; });
+  const wDev=r=>{ if(typeof r.weight!=="number")return null; const st=sexW[sexOf(r)].w; return st.sd>0?50+(r.weight-st.m)/st.sd*10:50; };
+  const yDev=r=>{ if(typeof r.yieldRate!=="number")return null; const st=sexW[sexOf(r)].y; return st.sd>0?50+(r.yieldRate-st.m)/st.sd*10:50; };
   const map={};
-  FAT.forEach(r=>{ const s=String(r.sire||"").trim(); if(!s)return; if(!map[s])map[s]={n:0,a4:0,a3:0,w:[],bms:[],y:[]};
+  FAT.forEach(r=>{ const s=String(r.sire||"").trim(); if(!s)return; if(!map[s])map[s]={n:0,a4:0,a3:0,w:[],bms:[],y:[],wd:[],yd:[]};
     const q=qnum(r.meatGrade); map[s].n++; if(q>=4)map[s].a4++; if(q>=3)map[s].a3++;
     if(typeof r.weight==="number")map[s].w.push(r.weight);
     if(typeof r.bms==="number")map[s].bms.push(r.bms);
-    if(typeof r.yieldRate==="number")map[s].y.push(r.yieldRate); });
+    if(typeof r.yieldRate==="number")map[s].y.push(r.yieldRate);
+    const wd=wDev(r); if(wd!=null)map[s].wd.push(wd);
+    const yd=yDev(r); if(yd!=null)map[s].yd.push(yd); });
   const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
   const rows=[];
   for(const s in map){ const d=map[s]; rows.push({name:s,n:d.n,rateA4:d.a4/d.n*100,rateA3:d.a3/d.n*100,
-    avgW:avg(d.w),avgBms:avg(d.bms),avgY:avg(d.y)}); }
-  // 偏差値化して推奨スコア（狙い：増体＋A4以上）。枝重40% A4以上率40% 歩留率20%
+    avgW:avg(d.w),avgBms:avg(d.bms),avgY:avg(d.y),
+    wSexIdx:avg(d.wd),ySexIdx:avg(d.yd)}); }
+  // 偏差値化して推奨スコア（狙い：増体＋A4以上）。枝重40% A4以上率40% 歩留率20%（枝重・歩留は性別調整済み）
   const dev=(arr,key)=>{ const vals=arr.map(r=>r[key]).filter(v=>typeof v==="number"); const m=vals.reduce((a,b)=>a+b,0)/vals.length;
     const sd=Math.sqrt(vals.reduce((a,b)=>a+(b-m)*(b-m),0)/vals.length); return {m,sd}; };
-  const dW=dev(rows,"avgW"), dA=dev(rows,"rateA4"), dY=dev(rows,"avgY");
+  const dW=dev(rows,"wSexIdx"), dA=dev(rows,"rateA4"), dY=dev(rows,"ySexIdx");
   rows.forEach(r=>{ let sc=0,w=0;
-    if(r.avgW!=null&&dW.sd>0){ sc+=(50+(r.avgW-dW.m)/dW.sd*10)*0.4; w+=0.4; }
+    if(r.wSexIdx!=null&&dW.sd>0){ sc+=(50+(r.wSexIdx-dW.m)/dW.sd*10)*0.4; w+=0.4; }
     if(dA.sd>0){ sc+=(50+(r.rateA4-dA.m)/dA.sd*10)*0.4; w+=0.4; }
-    if(r.avgY!=null&&dY.sd>0){ sc+=(50+(r.avgY-dY.m)/dY.sd*10)*0.2; w+=0.2; }
+    if(r.ySexIdx!=null&&dY.sd>0){ sc+=(50+(r.ySexIdx-dY.m)/dY.sd*10)*0.2; w+=0.2; }
     r.perfScore = w>0? Math.round(sc/w*10)/10 : null; });
   SIRE_PERF={}; rows.forEach(r=>SIRE_PERF[r.name]=r);
 }
