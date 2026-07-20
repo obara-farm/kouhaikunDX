@@ -83,6 +83,16 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
 .v-msg{}
 .v-ped-btn{margin-top:10px;background:rgba(255,255,255,.6);border:1px solid currentColor;color:inherit;font-size:12px;font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer;}
 .v-ped{margin-top:10px;background:#fff;border-radius:10px;padding:10px 12px;text-align:left;color:var(--ink);}
+.v-perf{margin-top:12px;background:rgba(255,255,255,.55);border-radius:10px;padding:9px 10px;}
+.v-perf.none{font-size:12px;color:inherit;opacity:.7;text-align:center;}
+.vp-h{font-size:11px;font-weight:800;opacity:.85;margin-bottom:6px;}
+.vp-grid{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;}
+.vp-grid>div{background:rgba(255,255,255,.7);border-radius:8px;padding:5px 8px;min-width:52px;text-align:center;color:var(--ink);}
+.vp-grid>div b{display:block;font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1;}
+.vp-grid>div span{font-size:9px;color:var(--ink2);}
+.vp-grid>.vp-score{background:var(--accent,#c9843f);} .vp-grid>.vp-score b{color:#fff;} .vp-grid>.vp-score span{color:rgba(255,255,255,.9);}
+.rperf{display:block;font-size:10px;font-weight:700;color:var(--accent,#c9843f);margin-top:2px;}
+.rperf.none{color:var(--ink2);font-weight:400;opacity:.7;}
 .ped-tree{font-size:13px;}
 .ped-row{display:flex;gap:8px;padding:3px 0;border-bottom:1px dashed var(--line);}
 .ped-row .pl{color:var(--ink2);font-size:11px;min-width:90px;font-weight:700;}
@@ -115,12 +125,16 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
   <div class="card" id="resultCard" style="display:none;">
     <h2>③ 全種雄牛の一覧（近交係数の低い順）</h2>
     <div class="legend"><span class="r-safe">🟢 6.25%未満</span><span class="r-warn">🟡 6.25〜12.5%</span><span class="r-danger">🔴 12.5%以上</span></div>
-    <div style="display:flex;gap:8px;margin-bottom:10px;">
-      <input type="text" id="res-search" placeholder="名前・系統で検索" oninput="renderResults()" style="flex:1;font-size:15px;padding:10px;border:1.5px solid var(--line);border-radius:10px;">
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <input type="text" id="res-search" placeholder="名前・系統で検索" oninput="renderResults()" style="flex:1;min-width:120px;font-size:15px;padding:10px;border:1.5px solid var(--line);border-radius:10px;">
       <select id="res-filter" onchange="renderResults()" style="font-size:14px;padding:10px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-weight:700;">
         <option value="all">すべて</option>
         <option value="instock">在庫あり</option>
         <option value="safe">安全のみ</option>
+      </select>
+      <select id="res-sort" onchange="renderResults()" style="font-size:14px;padding:10px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-weight:700;">
+        <option value="coef">近交係数順</option>
+        <option value="recommend">⭐おすすめ順</option>
       </select>
     </div>
     <div id="results"></div>
@@ -336,23 +350,51 @@ function isHira(s){ return /^[ぁ-んー]+$/.test(s||""); }
 // ===== Firebase =====
 const firebaseConfig={apiKey:"AIzaSyCer9Gz8nMbP3hBod3O_66oVQGEKsUfXVo",authDomain:"breeding-manager5.firebaseapp.com",databaseURL:"https://breeding-manager5-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"breeding-manager5",storageBucket:"breeding-manager5.firebasestorage.app",messagingSenderId:"663663293010",appId:"1:663663293010:web:eaef68dee692fe1322258b"};
 const FARM="obara";
-let kdb=null,kref=null,cowRef=null,semRef=null;
+let kdb=null,kref=null,cowRef=null,semRef=null,fatRef=null;
 try{ firebase.initializeApp(firebaseConfig); kdb=firebase.database();
   firebase.auth().signInAnonymously().catch(()=>setStatus("認証エラー（ローカルのみ）"));
   firebase.auth().onAuthStateChanged(u=>{ if(u){ kref=kdb.ref("koubai/farms/"+FARM);
     cowRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/cows");
     semRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/semenInventory");
-    loadCows(); loadSemen(); loadCloud(); }});
+    fatRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/fatteningRecords");
+    loadCows(); loadSemen(); loadFattening(); loadCloud(); }});
 }catch(e){ setStatus("オフライン（ローカルのみ）"); }
 function setStatus(t){ document.getElementById("syncStatus").textContent=t; }
 
+// ===== 肥育成績データ（種雄牛の産子成績・推奨に使用）=====
+let FAT=[]; let SIRE_PERF={}; // 種雄牛名(漢字) -> 成績
+function loadFattening(){ if(!fatRef)return; fatRef.once("value").then(s=>{ let v=s.val(); if(typeof v==="string"){try{v=JSON.parse(v);}catch(e){v=[];}}
+  FAT=(v||[]).filter(r=>r&&r.sire); computeSirePerf(); updStatus(); if(curFemale)renderBulls(); }).catch(()=>{}); }
+function qnum(mg){ const m=String(mg||"").match(/[1-5]/); return m?+m[0]:0; }
+function computeSirePerf(){
+  const map={};
+  FAT.forEach(r=>{ const s=String(r.sire||"").trim(); if(!s)return; if(!map[s])map[s]={n:0,a4:0,a3:0,w:[],bms:[],y:[]};
+    const q=qnum(r.meatGrade); map[s].n++; if(q>=4)map[s].a4++; if(q>=3)map[s].a3++;
+    if(typeof r.weight==="number")map[s].w.push(r.weight);
+    if(typeof r.bms==="number")map[s].bms.push(r.bms);
+    if(typeof r.yieldRate==="number")map[s].y.push(r.yieldRate); });
+  const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+  const rows=[];
+  for(const s in map){ const d=map[s]; rows.push({name:s,n:d.n,rateA4:d.a4/d.n*100,rateA3:d.a3/d.n*100,
+    avgW:avg(d.w),avgBms:avg(d.bms),avgY:avg(d.y)}); }
+  // 偏差値化して推奨スコア（狙い：増体＋A4以上）。枝重40% A4以上率40% 歩留率20%
+  const dev=(arr,key)=>{ const vals=arr.map(r=>r[key]).filter(v=>typeof v==="number"); const m=vals.reduce((a,b)=>a+b,0)/vals.length;
+    const sd=Math.sqrt(vals.reduce((a,b)=>a+(b-m)*(b-m),0)/vals.length); return {m,sd}; };
+  const dW=dev(rows,"avgW"), dA=dev(rows,"rateA4"), dY=dev(rows,"avgY");
+  rows.forEach(r=>{ let sc=0,w=0;
+    if(r.avgW!=null&&dW.sd>0){ sc+=(50+(r.avgW-dW.m)/dW.sd*10)*0.4; w+=0.4; }
+    if(dA.sd>0){ sc+=(50+(r.rateA4-dA.m)/dA.sd*10)*0.4; w+=0.4; }
+    if(r.avgY!=null&&dY.sd>0){ sc+=(50+(r.avgY-dY.m)/dY.sd*10)*0.2; w+=0.2; }
+    r.perfScore = w>0? Math.round(sc/w*10)/10 : null; });
+  SIRE_PERF={}; rows.forEach(r=>SIRE_PERF[r.name]=r);
+}
 function loadCows(){ if(!cowRef)return; cowRef.once("value").then(s=>{ let v=s.val(); if(typeof v==="string"){try{v=JSON.parse(v);}catch(e){v=[];}}
   COWS=(v||[]).filter(c=>c&&c.name).map(c=>({name:c.name,nationalId:c.nationalId||"",sire:c.sire||"",maternalSire:c.maternalSire||""}));
   updStatus(); }).catch(()=>setStatus("在籍牛の読込に失敗")); }
 function loadSemen(){ if(!semRef)return; semRef.once("value").then(s=>{ let v=s.val(); if(typeof v==="string"){try{v=JSON.parse(v);}catch(e){v=[];}}
   SEMEN=(v||[]).filter(x=>x&&x.name&&x.breed==="褐毛"&&(x.stock||0)>0).map(x=>({name:x.name,stock:x.stock||0,regNo:x.regNo||""}));
   updStatus(); renderBulls(); }).catch(()=>{}); }
-function updStatus(){ setStatus("✓ 在籍牛"+COWS.length+"頭・精液在庫"+SEMEN.length+"種 同期"); }
+function updStatus(){ setStatus("✓ 在籍牛"+COWS.length+"頭・精液在庫"+SEMEN.length+"種・肥育"+FAT.length+"件 同期"); }
 let MASTER_EDITS={}; // 編集した牛の血統（yomi -> {name,f,s1y,s1,...}）koubaiに保存
 function loadCloud(){ if(!kref)return; kref.once("value").then(s=>{ let d=s.val(); if(typeof d==="string"){try{d=JSON.parse(d);}catch(e){d=null;}}
   if(d){ if(Array.isArray(d.bulls))BULLS=d.bulls; if(Array.isArray(d.addedMaster)){d.addedMaster.forEach(m=>addToMaster(m,true));}
@@ -439,10 +481,27 @@ function pickBull(yomi,name){
     +'<div class="v-icon">'+icon+'</div>'
     +'<div class="v-coef">'+coef.toFixed(2)+'<span>%</span></div>'
     +'<div class="v-tag">'+tag+'</div><div class="v-msg">'+msg+'</div>'
+    +sirePerfHtml(name)
     +'<button class="v-ped-btn" onclick="togglePed(event,\''+esc(yomi)+'\',\''+esc(name).replace(/\'/g,"")+'\')">▼ '+esc(name)+'の血統を見る</button>'
     +'<div class="v-ped" id="v-ped" style="display:none;"></div>';
   v.style.display="block";
   v.scrollIntoView({behavior:"smooth",block:"center"});
+}
+// 種雄牛の産子成績（肥育データより）を表示
+function sirePerfHtml(name){
+  const p=SIRE_PERF[name];
+  if(!p) return '<div class="v-perf none">産子の肥育成績データなし</div>';
+  const w=p.avgW!=null?Math.round(p.avgW):'—';
+  const reliable = p.n>=10;
+  return '<div class="v-perf">'
+    +'<div class="vp-h">産子の肥育成績（'+p.n+'頭'+(reliable?'':'・少数で参考')+'）</div>'
+    +'<div class="vp-grid">'
+    +'<div><b>'+w+'</b><span>枝重kg</span></div>'
+    +'<div><b>'+Math.round(p.rateA4)+'%</b><span>A4以上</span></div>'
+    +'<div><b>'+Math.round(p.rateA3)+'%</b><span>A3以上</span></div>'
+    +'<div><b>'+(p.avgBms!=null?p.avgBms.toFixed(1):'—')+'</b><span>BMS</span></div>'
+    +(p.perfScore!=null?'<div class="vp-score"><b>'+p.perfScore+'</b><span>成績★</span></div>':'')
+    +'</div></div>';
 }
 // 血統詳細（父方3代を展開して表示）
 function pedigreeHtml(yomi){
@@ -473,7 +532,12 @@ function calcAll(){
   const stockMap={}; SEMEN.forEach(s=>{const y=toYomi(s.name); if(y)stockMap[y]=s.stock;});
   _allRows=[];
   for(let i=0;i<MC.A.length;i++){ const y=MC.A[i], nm=MC.B[i]||y;
-    _allRows.push({name:nm,yomi:y,stock:stockMap[y]||0,keitou:keitouOf(nm,y),coef:engine.compute(curFemale.s1,curFemale.s2,curFemale.s3,curFemale.s4,y)});
+    const coef=engine.compute(curFemale.s1,curFemale.s2,curFemale.s3,curFemale.s4,y);
+    const perf=SIRE_PERF[nm]||null;
+    // おすすめスコア：成績★（perfScore）ベース、近交リスクで減点、危険は大幅減点
+    let rec=null;
+    if(perf&&perf.perfScore!=null){ rec=perf.perfScore; if(coef>=12.5)rec-=30; else if(coef>=6.25)rec-=8; }
+    _allRows.push({name:nm,yomi:y,stock:stockMap[y]||0,keitou:keitouOf(nm,y),coef:coef,perf:perf,rec:rec});
   }
   _allRows.sort((a,b)=>a.coef-b.coef);
   document.getElementById("resultCard").style.display="";
@@ -485,17 +549,29 @@ function calcAll(){
 function renderResults(){
   const q=(document.getElementById("res-search").value||"").trim().toLowerCase();
   const fil=document.getElementById("res-filter").value;
+  const sort=(document.getElementById("res-sort")||{}).value||"coef";
   let rows=_allRows.filter(r=>{
     if(fil==="instock"&&!r.stock)return false;
     if(fil==="safe"&&r.coef>=6.25)return false;
     if(q && !(r.name.toLowerCase().indexOf(q)>=0 || (r.yomi&&r.yomi.toLowerCase().indexOf(q)>=0) || (r.keitou&&r.keitou.indexOf(q)>=0)))return false;
     return true;
   });
+  if(sort==="recommend"){
+    rows=rows.slice().sort((a,b)=>{ const ra=a.rec==null?-999:a.rec, rb=b.rec==null?-999:b.rec; if(rb!==ra)return rb-ra; return a.coef-b.coef; });
+  }
+  const hint = sort==="recommend"
+    ? '⭐おすすめ順（産子成績が良く近交が安全な順）｜🐂＝在庫あり'
+    : rows.length+'頭を近交係数の低い順（🐂＝在庫あり）';
   document.getElementById("results").innerHTML=
-    '<div class="hint">'+rows.length+'頭を表示（🐂＝精液在庫あり）</div>'
-    +rows.map(r=>{ const i=_allRows.indexOf(r); let cls="r-safe",tag="安全";
+    '<div class="hint">'+hint+'</div>'
+    +rows.map((r,idx)=>{ let cls="r-safe",tag="安全";
     if(r.coef>=12.5){cls="r-danger";tag="危険";}else if(r.coef>=6.25){cls="r-warn";tag="注意";}
-    return '<div class="result-row '+cls+'"><span class="rank">'+(i+1)+'</span><span class="bull">'+(r.stock?'🐂 ':'')+esc(r.name)+' <span class="yomi">'+esc(r.keitou)+(r.stock?'・在庫'+r.stock+'本':'')+'</span></span><span class="tag">'+tag+'</span><span class="coef">'+r.coef.toFixed(2)+'<span class="pct">%</span></span></div>';
+    const rank = sort==="recommend" ? (idx+1) : (_allRows.indexOf(r)+1);
+    let perfBadge='';
+    if(r.perf){ const w=r.perf.avgW!=null?Math.round(r.perf.avgW):'—';
+      perfBadge='<span class="rperf">枝重'+w+'・A4以上'+Math.round(r.perf.rateA4)+'%'+(r.perf.perfScore!=null?'・成績★'+r.perf.perfScore:'')+'</span>'; }
+    else { perfBadge='<span class="rperf none">成績データなし</span>'; }
+    return '<div class="result-row '+cls+'"><span class="rank">'+rank+'</span><span class="bull">'+(r.stock?'🐂 ':'')+esc(r.name)+' <span class="yomi">'+esc(r.keitou)+(r.stock?'・在庫'+r.stock+'本':'')+'</span>'+perfBadge+'</span><span class="tag">'+tag+'</span><span class="coef">'+r.coef.toFixed(2)+'<span class="pct">%</span></span></div>';
   }).join("") || '<div class="empty">該当なし</div>';
 }
 
