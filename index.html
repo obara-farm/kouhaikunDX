@@ -531,7 +531,9 @@ function sirePerfHtml(name){
     +'<div><b>'+Math.round(p.rateA3)+'%</b><span>A3以上</span></div>'
     +'<div><b>'+(p.avgBms!=null?p.avgBms.toFixed(1):'—')+'</b><span>BMS</span></div>'
     +(p.perfScore!=null?'<div class="vp-score"><b>'+p.perfScore+'</b><span>成績★</span></div>':'')
-    +'</div></div>';
+    +'</div>'
+    +'<div style="font-size:9px;color:var(--ink2);margin-top:5px;line-height:1.5;">成績★＝枝重40%＋A4以上率40%＋歩留率20%を偏差値化（枝重・歩留は去勢／未経産を分けて評価。50が平均）。あか牛らしい増体とA4以上の安定を重視。</div>'
+    +'</div>';
 }
 // 血統詳細（父方3代を展開して表示）
 function pedigreeHtml(yomi){
@@ -593,7 +595,7 @@ function renderResults(){
     rows=rows.slice().sort((a,b)=>{ const ra=a.rec==null?-999:a.rec, rb=b.rec==null?-999:b.rec; if(rb!==ra)return rb-ra; return a.coef-b.coef; });
   }
   const hint = sort==="recommend"
-    ? '⭐おすすめ順（産子成績が良く近交が安全な順）｜🐂＝在庫あり'
+    ? '⭐おすすめ順：成績★（産子の肥育成績）が高く近交が安全な順｜成績★＝枝重40%＋A4以上率40%＋歩留率20%を偏差値化（枝重・歩留は去勢／未経産で分けて評価）。近交リスクは減点（🔴危険は大幅減点）｜🐂＝在庫あり'
     : rows.length+'頭を近交係数の低い順（🐂＝在庫あり）';
   document.getElementById("results").innerHTML=
     '<div class="hint">'+hint+'</div>'
