@@ -148,6 +148,10 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
 </div>
 
 <div class="modal-bg" id="pickCowModal"><div class="modal"><button class="x" onclick="closeModal('pickCowModal')">×</button><h2>在籍牛から選ぶ</h2>
+  <div style="display:flex;gap:6px;margin-bottom:8px;">
+    <button class="btn sm" id="src-obara" onclick="setCowSource('obara')">小原農場</button>
+    <button class="btn sm sec" id="src-nagashima" onclick="setCowSource('nagashima')">長島牧場</button>
+  </div>
   <input type="text" class="searchbar" id="cowSearch" placeholder="名前 or 耳標で検索" oninput="renderCowList()"><div class="picklist" id="cowList"></div></div></div>
 
 <div class="modal-bg" id="manageModal"><div class="modal"><button class="x" onclick="closeModal('manageModal')">×</button>
@@ -367,6 +371,8 @@ function setStatus(t){ document.getElementById("syncStatus").textContent=t; }
 
 // ===== 肥育成績データ（種雄牛の産子成績・推奨に使用）=====
 let FAT=[]; let SIRE_PERF={}; // 種雄牛名(漢字) -> 成績
+const SIRE_ALIAS={'菊鶴ET':'菊鶴ETI'};
+function normalizeSireName(s){ if(!s)return s; s=String(s).trim().replace(/Ⅰ/g,'I').replace(/Ⅱ/g,'II').replace(/Ⅲ/g,'III'); try{s=s.normalize('NFKC');}catch(e){} s=s.replace(/ノ/g,'の'); return SIRE_ALIAS[s]||s; }
 function loadFattening(){ if(!fatRef)return; fatRef.once("value").then(s=>{ let v=s.val(); if(typeof v==="string"){try{v=JSON.parse(v);}catch(e){v=[];}}
   FAT=(v||[]).filter(r=>r&&r.sire); computeSirePerf(); updStatus(); if(curFemale)renderBulls(); }).catch(()=>{}); }
 function qnum(mg){ const m=String(mg||"").match(/[1-5]/); return m?+m[0]:0; }
@@ -382,7 +388,7 @@ function computeSirePerf(){
   const wDev=r=>{ if(typeof r.weight!=="number")return null; const st=sexW[sexOf(r)].w; return st.sd>0?50+(r.weight-st.m)/st.sd*10:50; };
   const yDev=r=>{ if(typeof r.yieldRate!=="number")return null; const st=sexW[sexOf(r)].y; return st.sd>0?50+(r.yieldRate-st.m)/st.sd*10:50; };
   const map={};
-  FAT.forEach(r=>{ const s=String(r.sire||"").trim(); if(!s)return; if(!map[s])map[s]={n:0,a4:0,a3:0,w:[],wCast:[],wHeif:[],bms:[],y:[],wd:[],yd:[]};
+  FAT.forEach(r=>{ const s=normalizeSireName(String(r.sire||"").trim()); if(!s)return; if(!map[s])map[s]={n:0,a4:0,a3:0,w:[],wCast:[],wHeif:[],bms:[],y:[],wd:[],yd:[]};
     const q=qnum(r.meatGrade); map[s].n++; if(q>=4)map[s].a4++; if(q>=3)map[s].a3++;
     if(typeof r.weight==="number"){ map[s].w.push(r.weight);
       if(sexOf(r)==="M")map[s].wCast.push(r.weight); else if(sexOf(r)==="F")map[s].wHeif.push(r.weight); }
@@ -438,20 +444,35 @@ function addToMaster(b,silent){ if(MC.A.indexOf(b.yomi)>=0)return;
   MC.H.push(b.s3y||"");MC.I.push(b.s3||"");MC.J.push(b.s4y||"");MC.K.push(b.s4||"");
   if(!NAMES.some(n=>n.yomi===b.yomi))NAMES.push({yomi:b.yomi,name:b.name||b.yomi}); }
 
+// ===== 長島牧場 在籍牛（CSV取込・50頭。祖母の父まで登録あり）=====
+const NAGASHIMA_COWS=[{"name":"えりこ","tag":"N-22","nationalId":"1398824216","sire":"幸泉","maternalSire":"第十六光重","gmSire":"光玉波","parity":"6","age":"9"},{"name":"きくみつ","tag":"K-48","nationalId":"1626600568","sire":"光晴重","maternalSire":"菊光丸","gmSire":"第四光重","parity":"3","age":"5"},{"name":"みえこ","tag":"N-28","nationalId":"1383124604","sire":"光晴重","maternalSire":"第二重波","gmSire":"第十一光重","parity":"6","age":"8"},{"name":"N-39","tag":"N-39","nationalId":"1658427430","sire":"秋桜","maternalSire":"光晴重","gmSire":"第二重波","parity":"1","age":"2"},{"name":"たまき","tag":"N-13","nationalId":"1637926787","sire":"光重球磨七","maternalSire":"玉君ETI2","gmSire":"鶴光重","parity":"2","age":"4"},{"name":"あみか","tag":"N-19","nationalId":"1516723933","sire":"第九栄豊","maternalSire":"鶴光重","gmSire":"第十光丸","parity":"7","age":"9"},{"name":"おはる","tag":"N-32","nationalId":"1602825343","sire":"光晴重","maternalSire":"第四弦光","gmSire":"第十六光重","parity":"4","age":"6"},{"name":"たんぽぽ","tag":"K-51","nationalId":"1417543432","sire":"重波泉","maternalSire":"菊光浦","gmSire":"第十六光重","parity":"1","age":"2"},{"name":"かえら","tag":"B-1","nationalId":"1300370640","sire":"","maternalSire":"","gmSire":"","parity":"12","age":"15"},{"name":"しげたま","tag":"K-33","nationalId":"1361037018","sire":"重川6の4","maternalSire":"第十六光重","gmSire":"光玉波","parity":"9","age":"10"},{"name":"うめみ","tag":"N-21","nationalId":"1398824193","sire":"玉君ETI2","maternalSire":"第四弦光","gmSire":"第二重波","parity":"7","age":"9"},{"name":"みくな","tag":"N-12","nationalId":"1637926770","sire":"光重球磨七","maternalSire":"玉君ETI2","gmSire":"鶴光重","parity":"2","age":"4"},{"name":"しおみ","tag":"N-27","nationalId":"1383124598","sire":"光晴重","maternalSire":"第二重波","gmSire":"第十一光重","parity":"6","age":"8"},{"name":"めぐ","tag":"K-44","nationalId":"1348394288","sire":"光晴重","maternalSire":"第二弦光","gmSire":"第十六光重","parity":"6","age":"7"},{"name":"ときこ","tag":"N-36","nationalId":"1564625807","sire":"光晴重","maternalSire":"玉君ETI2","gmSire":"鶴光重","parity":"4","age":"6"},{"name":"はづき","tag":"K-43","nationalId":"1489335133","sire":"光晴重","maternalSire":"光重星","gmSire":"第四光重","parity":"6","age":"7"},{"name":"まさみ","tag":"N-2","nationalId":"1400026140","sire":"光晴重","maternalSire":"鶴光重","gmSire":"光重球磨","parity":"3","age":"5"},{"name":"はずき","tag":"N-15","nationalId":"1391523482","sire":"玉君ETI2","maternalSire":"第七波丸","gmSire":"第九栄豊","parity":"9","age":"10"},{"name":"しずく","tag":"N-8","nationalId":"1376826379","sire":"重波泉","maternalSire":"第四弦光","gmSire":"光重球磨","parity":"3","age":"5"},{"name":"しげふく","tag":"K-42","nationalId":"1577670979","sire":"光晴重","maternalSire":"第四弦光","gmSire":"光長","parity":"6","age":"7"},{"name":"あきこ","tag":"K-34","nationalId":"1368789323","sire":"光晴重","maternalSire":"秋光重","gmSire":"第二弦光","parity":"9","age":"10"},{"name":"なみみつしげ","tag":"K-50","nationalId":"1365382497","sire":"光晴重","maternalSire":"波泉","gmSire":"第四光重","parity":"3","age":"5"},{"name":"ながと","tag":"N-24","nationalId":"1398824490","sire":"光晴重","maternalSire":"光玉波","gmSire":"第四光重","parity":"6","age":"8"},{"name":"くまち390ET","tag":"K-40","nationalId":"1516746758","sire":"菊光浦","maternalSire":"春山都","gmSire":"第十光丸","parity":"6","age":"8"},{"name":"ゆうか","tag":"K-46","nationalId":"1506100744","sire":"光晴重","maternalSire":"鶴光重","gmSire":"菊光丸","parity":"5","age":"6"},{"name":"ららみ","tag":"N-20","nationalId":"1398824179","sire":"光晴重","maternalSire":"重光玉","gmSire":"波丸ET","parity":"8","age":"9"},{"name":"第三ふくまる","tag":"K-49","nationalId":"1395829108","sire":"光晴重","maternalSire":"菊光丸","gmSire":"第十六光重","parity":"4","age":"5"},{"name":"はるか","tag":"N-11","nationalId":"1376826713","sire":"重波泉","maternalSire":"光晴重","gmSire":"春山都","parity":"2","age":"4"},{"name":"ふみの","tag":"N-23","nationalId":"1398824483","sire":"春山都","maternalSire":"光晴重","gmSire":"第十六光重","parity":"7","age":"8"},{"name":"かがや","tag":"N-33","nationalId":"1602825633","sire":"重川6の4","maternalSire":"春山都","gmSire":"光晴重","parity":"5","age":"6"},{"name":"みつまる","tag":"N-3","nationalId":"1400026157","sire":"光晴重","maternalSire":"春山都","gmSire":"第十四光重","parity":"4","age":"5"},{"name":"みつよ","tag":"N-35","nationalId":"1564625661","sire":"光晴重","maternalSire":"鶴光重","gmSire":"光重球磨","parity":"4","age":"6"},{"name":"つるみ","tag":"K-47","nationalId":"1490668916","sire":"光晴重","maternalSire":"第四弦光","gmSire":"光長","parity":"6","age":"6"},{"name":"はれまる","tag":"E-1","nationalId":"1391986379","sire":"光晴重","maternalSire":"幸泉","gmSire":"第四光重","parity":"4","age":"5"},{"name":"まさつる","tag":"N-1","nationalId":"1602825510","sire":"弦球","maternalSire":"春山都","gmSire":"第十六光重","parity":"4","age":"5"},{"name":"にしき","tag":"K-37","nationalId":"1529948538","sire":"菊光浦","maternalSire":"春山都","gmSire":"第三光重","parity":"9","age":"9"},{"name":"ひのしずく","tag":"K-6","nationalId":"1451046944","sire":"光晴重","maternalSire":"重川栄","gmSire":"鶴光重","parity":"3","age":"4"},{"name":"かいり","tag":"N-34","nationalId":"1602825640","sire":"幸泉","maternalSire":"第四弦光","gmSire":"第十六光重","parity":"5","age":"6"},{"name":"しげみ","tag":"K-36","nationalId":"1529951781","sire":"重川栄","maternalSire":"第二弦光","gmSire":"第十四光重","parity":"8","age":"9"},{"name":"ゆめの","tag":"N-30","nationalId":"1585725166","sire":"光晴重","maternalSire":"春山都","gmSire":"第十四光重","parity":"6","age":"7"},{"name":"きくな","tag":"N-26","nationalId":"1383124567","sire":"光晴重","maternalSire":"菊光浦","gmSire":"波丸","parity":"6","age":"8"},{"name":"まなか","tag":"N-17","nationalId":"1516723735","sire":"玉君ETI2","maternalSire":"第二弦光","gmSire":"第九栄豊","parity":"9","age":"10"},{"name":"はるか","tag":"N-4","nationalId":"1376826362","sire":"鶴光重","maternalSire":"第二弦光","gmSire":"第九栄豊","parity":"3","age":"5"},{"name":"あきこ壱","tag":"K-39","nationalId":"1364565402","sire":"光晴重","maternalSire":"波泉","gmSire":"光玉波","parity":"7","age":"8"},{"name":"きみえ","tag":"N-29","nationalId":"1585725135","sire":"光晴重","maternalSire":"第十一光重","gmSire":"波丸","parity":"6","age":"7"},{"name":"とみはるET","tag":"K-45","nationalId":"1366745857","sire":"光晴重","maternalSire":"第四弦光","gmSire":"第十六光重","parity":"6","age":"6"},{"name":"N-37","tag":"N-37","nationalId":"1658427270","sire":"重波泉","maternalSire":"光晴重","gmSire":"春山都","parity":"2","age":"3"},{"name":"みなみ","tag":"N-6","nationalId":"1376826690","sire":"重波泉","maternalSire":"光晴重","gmSire":"第十一光重","parity":"3","age":"4"},{"name":"いろは","tag":"E-2","nationalId":"1662669116","sire":"第二光晴","maternalSire":"重波泉","gmSire":"光晴重","parity":"0","age":"1"},{"name":"うらら","tag":"E-3","nationalId":"1662669154","sire":"光晴重","maternalSire":"鶴光重","gmSire":"重光玉","parity":"0","age":"1"}];
+let cowSource="obara"; // obara=小原(Firebase同期) / nagashima=長島(登録済み)
+function currentCowList(){ return cowSource==="nagashima" ? NAGASHIMA_COWS : COWS; }
+function setCowSource(s){ cowSource=s; const el=document.getElementById("cowSearch"); if(el)el.value=""; renderCowList();
+  ["src-obara","src-nagashima"].forEach(id=>{const b=document.getElementById(id); if(b)b.className="btn sm "+(id==="src-"+s?"":"sec");}); }
 // ===== 母牛 =====
 function openPickCow(){ document.getElementById("cowSearch").value=""; renderCowList(); openModal("pickCowModal"); }
 function renderCowList(){ const q=document.getElementById("cowSearch").value.trim().toLowerCase();
-  const list=COWS.filter(c=>!q||c.name.toLowerCase().indexOf(q)>=0||(c.nationalId+"").indexOf(q)>=0).slice(0,300);
-  document.getElementById("cowList").innerHTML=list.length?list.map(c=>{ const idx=COWS.indexOf(c);
-    return '<div class="pick-item" onclick="selectCow('+idx+')"><span><b>'+esc(c.name)+'</b><span class="sub"> 耳標'+esc(c.nationalId)+'</span></span><span class="sub">'+esc(c.sire||"—")+' / '+esc(c.maternalSire||"—")+'</span></div>';
+  const src=currentCowList();
+  const list=src.filter(c=>!q||c.name.toLowerCase().indexOf(q)>=0||(c.nationalId+"").indexOf(q)>=0||((c.tag||"").toLowerCase().indexOf(q)>=0)).slice(0,300);
+  document.getElementById("cowList").innerHTML=list.length?list.map(c=>{ const idx=src.indexOf(c);
+    const sub=(c.tag?esc(c.tag)+" ":"")+esc(c.nationalId||"");
+    const ped=esc(c.sire||"—")+' / '+esc(c.maternalSire||"—")+(c.gmSire?' / '+esc(c.gmSire):'');
+    return '<div class="pick-item" onclick="selectCow('+idx+')"><span><b>'+esc(c.name)+'</b><span class="sub"> '+sub+'</span></span><span class="sub">'+ped+'</span></div>';
   }).join(""):'<div class="hint" style="padding:20px;text-align:center;">該当なし</div>'; }
-function selectCow(idx){ const c=COWS[idx];
-  curFemale={s1:toYomi(c.sire),s2:toYomi(c.maternalSire),s3:"",s4:"",name:c.name,rawS1:c.sire,rawS2:c.maternalSire,nationalId:c.nationalId};
-  const miss=[]; if(c.sire&&!K2Y[c.sire]&&!isHira(c.sire))miss.push(c.sire); if(c.maternalSire&&!K2Y[c.maternalSire]&&!isHira(c.maternalSire))miss.push(c.maternalSire);
+function selectCow(idx){ const c=currentCowList()[idx];
+  applyCowSelection(c, cowSource==="nagashima"?"長島牧場 ":"");
+  closeModal("pickCowModal");
+}
+// 母牛オブジェクト{name,sire,maternalSire,gmSire,nationalId,tag}を選択状態に反映（一覧選択・URL連携で共用）
+function applyCowSelection(c, farmLabelPrefix){
+  curFemale={s1:toYomi(c.sire),s2:toYomi(c.maternalSire),s3:c.gmSire?toYomi(c.gmSire):"",s4:"",name:c.name,rawS1:c.sire,rawS2:c.maternalSire,rawS3:c.gmSire||"",nationalId:c.nationalId,farm:cowSource};
+  const miss=[]; [c.sire,c.maternalSire,c.gmSire].forEach(x=>{ if(x&&!K2Y[x]&&!isHira(x))miss.push(x); });
   const box=document.getElementById("selCow");
-  box.innerHTML='<b>'+esc(c.name)+'</b>（耳標'+esc(c.nationalId)+'）<div class="ped">父：'+esc(c.sire||"—")+' ／ 母の父：'+esc(c.maternalSire||"—")+'</div>'
+  box.innerHTML='<b>'+esc(c.name)+'</b>（'+(farmLabelPrefix||"")+esc(c.tag||"")+' '+esc(c.nationalId||"")+'）'
+    +'<div class="ped">父：'+esc(c.sire||"—")+' ／ 母の父：'+esc(c.maternalSire||"—")+(c.gmSire?' ／ 祖母の父：'+esc(c.gmSire):'')+'</div>'
     +(miss.length?'<div class="warnbox">⚠ '+miss.map(esc).join("、")+' はマスタ未登録。正確な計算には血統追加が必要です。</div>':"");
-  box.classList.add("on"); closeModal("pickCowModal");
+  box.classList.add("on");
   clearResult(); renderBulls();
 }
 function clearResult(){ document.getElementById("verdict").style.display="none"; document.getElementById("resultCard").style.display="none"; }
@@ -508,7 +529,7 @@ function pickBull(yomi,name){
 }
 // 種雄牛の産子成績（肥育データより）を表示
 function sirePerfHtml(name){
-  const p=SIRE_PERF[name];
+  const p=SIRE_PERF[normalizeSireName(name)]||SIRE_PERF[name];
   if(!p) return '<div class="v-perf none">産子の肥育成績データなし</div>';
   const reliable = p.n>=10;
   // 枝重は去勢/未経産で分けて表示
@@ -565,7 +586,7 @@ function calcAll(){
   _allRows=[];
   for(let i=0;i<MC.A.length;i++){ const y=MC.A[i], nm=MC.B[i]||y;
     const coef=engine.compute(curFemale.s1,curFemale.s2,curFemale.s3,curFemale.s4,y);
-    const perf=SIRE_PERF[nm]||null;
+    const perf=SIRE_PERF[normalizeSireName(nm)]||SIRE_PERF[nm]||null;
     // おすすめスコア：成績★（perfScore）ベース、近交リスクで減点、危険は大幅減点
     let rec=null;
     if(perf&&perf.perfScore!=null){ rec=perf.perfScore; if(coef>=12.5)rec-=30; else if(coef>=6.25)rec-=8; }
@@ -712,6 +733,26 @@ function fillPedFromMaster(y){ const m=getMasterByYomi(y); const st=document.get
   if(st){ st.textContent="✓ マスタにある牛です。血統を自動入力しました（修正可）"; st.className="ystat ok"; }
 }
 renderBulls();
+
+// ===== 繁殖管理ツールからの連携：URLパラメータで母牛を自動セット =====
+// 例: ?dam=にわか&damsire=光晴重&damgrandsire=重光玉&nationalId=...&tag=...
+(function(){
+  const p = new URLSearchParams(location.search);
+  const dam = p.get('dam');
+  if(!dam) return;
+  const c = {
+    name: dam,
+    sire: p.get('damsire') || '',
+    maternalSire: p.get('damgrandsire') || '',
+    gmSire: p.get('damggsire') || '',
+    nationalId: p.get('nationalId') || '',
+    tag: p.get('tag') || '',
+  };
+  applyCowSelection(c, '🐄 繁殖管理より ');
+  toast('繁殖管理ツールから「'+dam+'」を受け取りました');
+  const card = document.getElementById('card-female');
+  if(card) setTimeout(()=>card.scrollIntoView({behavior:'smooth'}), 200);
+})();
 
 </script>
 </body>
