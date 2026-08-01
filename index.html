@@ -379,28 +379,72 @@ function loadFattening(){ if(!fatRef)return; fatRef.once("value").then(s=>{ let 
   if(lastSelectedCow) applyCowSelection(lastSelectedCow, lastFarmLabel);   // 選択済みの母牛があれば産子成績を反映して再表示
 }).catch(()=>{}); }
 // 選択中の母牛の産子肥育成績を、読み込み済みのFATから集計（無ければURL経由の値にフォールバック）
+// FAT全体を基準にした偏差値計算用（BMS・枝重・歩留率・上物率の4指標）
+let _fatDevStats = null;
+function computeFatDevStats(){
+  if(_fatDevStats) return _fatDevStats;
+  const traits = ["bms","weight","yieldRate"];
+  const st = {};
+  traits.forEach(key=>{
+    const vals = FAT.map(r=>r[key]).filter(v=>typeof v==="number"&&!isNaN(v));
+    const m = vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
+    const sd = vals.length?Math.sqrt(vals.reduce((a,b)=>a+(b-m)*(b-m),0)/vals.length):0;
+    st[key]={m,sd};
+  });
+  const highVals = FAT.map(r=>/^[AB][45]$/.test(r.meatGrade||"")?100:0);
+  const hm = highVals.length?highVals.reduce((a,b)=>a+b,0)/highVals.length:0;
+  const hsd = highVals.length?Math.sqrt(highVals.reduce((a,b)=>a+(b-hm)*(b-hm),0)/highVals.length):0;
+  st.highRate = {m:hm, sd:hsd};
+  _fatDevStats = st;
+  return st;
+}
+// 選択中の母牛の産子肥育成績を、読み込み済みのFATから集計（母の父の完全一致は必須にしない＝表記ゆれで取りこぼさないため）
 function progenyStatsFor(c){
   if(FAT.length){
     const isNagashima = cowSource==="nagashima";
-    const myMSire = c.maternalSire ? normalizeSireName(String(c.maternalSire).trim()) : "";
     const recs = FAT.filter(r=>{
       if(String(r.dam||"").trim() !== String(c.name||"").trim()) return false;
       const f=(r.farmer||"").trim();
-      if(isNagashima){ if(!f.includes("長島")) return false; }
+      if(isNagashima){ if(f && !f.includes("長島")) return false; }
       else { if(f && !f.includes("小原")) return false; }
-      if(myMSire){ const rms=normalizeSireName(String(r.grandsire||"").trim()); if(rms && rms!==myMSire) return false; }
       return true;
     });
-    if(recs.length){
-      const ws=recs.map(r=>r.weight).filter(w=>typeof w==="number"&&!isNaN(w));
-      const avgW=ws.length?Math.round(ws.reduce((a,b)=>a+b,0)/ws.length):null;
-      const a4=recs.filter(r=>/^[AB][45]$/.test(r.meatGrade||"")).length;
-      return { count:recs.length, avgWeight:avgW, a4Rate:Math.round(a4/recs.length*100) };
-    }
-    return null;   // FATは読み込み済みだがこの牛の産子は無い
+    if(!recs.length) return null;   // FATは読み込み済みだがこの牛の産子は無い
+
+    const st = computeFatDevStats();
+    const dev = (val,key) => (typeof val==="number" && !isNaN(val) && st[key].sd>0) ? 50+(val-st[key].m)/st[key].sd*10 : null;
+    const bmsVals = recs.map(r=>r.bms).filter(v=>typeof v==="number"&&!isNaN(v));
+    const avgBms = bmsVals.length ? (bmsVals.reduce((a,b)=>a+b,0)/bmsVals.length) : null;
+    const yVals = recs.map(r=>r.yieldRate).filter(v=>typeof v==="number"&&!isNaN(v));
+    const avgYield = yVals.length ? (yVals.reduce((a,b)=>a+b,0)/yVals.length) : null;
+    const a4 = recs.filter(r=>/^[AB][45]$/.test(r.meatGrade||"")).length;
+    const a3 = recs.filter(r=>/^[AB][345]$/.test(r.meatGrade||"")).length;
+    const a4Rate = Math.round(a4/recs.length*100);
+    const a3Rate = Math.round(a3/recs.length*100);
+    // 性別ごとの枝重平均（去勢／未経産）
+    const sexOf = r => /去勢/.test(r.sex||"") ? "castrated" : /未経|雌|めす/.test(r.sex||"") ? "heifer" : "other";
+    const wCast = recs.filter(r=>sexOf(r)==="castrated").map(r=>r.weight).filter(w=>typeof w==="number"&&!isNaN(w));
+    const wHeif = recs.filter(r=>sexOf(r)==="heifer").map(r=>r.weight).filter(w=>typeof w==="number"&&!isNaN(w));
+    const avg = a => a.length ? Math.round(a.reduce((x,y)=>x+y,0)/a.length) : null;
+    // 総合スコア：BMS・枝重・歩留率・上物率(A4以上率)を偏差値化した等加重平均
+    const devs = [
+      dev(avgBms,"bms"),
+      dev(avg([...wCast,...wHeif]),"weight"),
+      dev(avgYield,"yieldRate"),
+      dev(a4Rate,"highRate"),
+    ].filter(v=>v!=null);
+    const score = devs.length ? (devs.reduce((a,b)=>a+b,0)/devs.length) : null;
+    return {
+      count:recs.length, score,
+      avgBms: avgBms!=null?avgBms.toFixed(1):null,
+      avgWeightCast: avg(wCast), avgWeightHeifer: avg(wHeif),
+      avgYield: avgYield!=null?avgYield.toFixed(1):null,
+      a3Rate, a4Rate,
+      lowSample: recs.length < 3,
+    };
   }
   // FAT未読み込み時：URL経由で渡された値があればそれを暫定表示
-  if(c.progCount) return { count:c.progCount, avgWeight:c.progAvgWeight, a4Rate:c.progA4Rate };
+  if(c.progCount) return { count:c.progCount, avgWeightCast:c.progAvgWeight, a4Rate:c.progA4Rate, lowSample:true };
   return null;
 }
 function qnum(mg){ const m=String(mg||"").match(/[1-5]/); return m?+m[0]:0; }
@@ -499,11 +543,21 @@ function applyCowSelection(c, farmLabelPrefix){
   const miss=[]; [c.sire,c.maternalSire,c.gmSire].forEach(x=>{ if(x&&!K2Y[x]&&!isHira(x))miss.push(x); });
   const box=document.getElementById("selCow");
   const prog = progenyStatsFor(c);
+  const statBox = (val,label) => '<div style="flex:1;min-width:70px;background:var(--bg2,#f5f5f5);border-radius:8px;padding:8px 6px;text-align:center;">'
+    +'<div style="font-size:16px;font-weight:900;color:#222;">'+(val!=null&&val!==""?val:"—")+'</div>'
+    +'<div style="font-size:9px;color:#888;margin-top:2px;">'+label+'</div></div>';
   const progHtml = prog ? (
-    '<div style="background:var(--bg2,#f5f5f5);border:1px solid #ddd;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;">'
-    +'🥩 産子の肥育成績（'+prog.count+'頭）'
-    +(prog.avgWeight?'　平均枝重 '+prog.avgWeight+'kg':'')
-    +(prog.a4Rate!=null?'　A4以上率 '+prog.a4Rate+'%':'')
+    '<div style="border:1px solid #ddd;border-radius:8px;padding:10px 12px;margin-top:8px;">'
+    +'<div style="font-size:11px;font-weight:700;color:#666;letter-spacing:1px;margin-bottom:6px;">🥩 産子の肥育成績（'+prog.count+'頭）</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+    + (prog.score!=null ? statBox(prog.score.toFixed(1),'総合スコア') : '')
+    + (prog.avgBms!=null ? statBox(prog.avgBms,'BMS平均') : '')
+    + (prog.avgWeightCast!=null ? statBox('去勢'+prog.avgWeightCast+'kg','枝重平均') : (prog.avgWeightHeifer!=null ? statBox('未経産'+prog.avgWeightHeifer+'kg','枝重平均') : ''))
+    + (prog.avgYield!=null ? statBox(prog.avgYield+'%','歩留率平均') : '')
+    + (prog.a3Rate!=null ? statBox(prog.a3Rate+'%','A3以上率') : '')
+    + (prog.a4Rate!=null ? statBox(prog.a4Rate+'%','A4以上率') : '')
+    +'</div>'
+    +(prog.lowSample?'<div style="font-size:10px;color:#999;margin-top:6px;">※ 3頭未満のため参考値</div>':'')
     +'</div>'
   ) : (FAT.length ? '<div style="color:#999;font-size:11px;margin-top:6px;">この母牛の産子の肥育成績データはまだありません</div>' : '');
   box.innerHTML='<b>'+esc(c.name)+'</b>（'+(farmLabelPrefix||"")+esc(c.tag||"")+' '+esc(c.nationalId||"")+'）'
