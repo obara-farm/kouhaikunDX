@@ -373,8 +373,36 @@ function setStatus(t){ document.getElementById("syncStatus").textContent=t; }
 let FAT=[]; let SIRE_PERF={}; // 種雄牛名(漢字) -> 成績
 const SIRE_ALIAS={'菊鶴ET':'菊鶴ETI'};
 function normalizeSireName(s){ if(!s)return s; s=String(s).trim().replace(/Ⅰ/g,'I').replace(/Ⅱ/g,'II').replace(/Ⅲ/g,'III'); try{s=s.normalize('NFKC');}catch(e){} s=s.replace(/ノ/g,'の'); return SIRE_ALIAS[s]||s; }
+let lastSelectedCow=null, lastFarmLabel="";
 function loadFattening(){ if(!fatRef)return; fatRef.once("value").then(s=>{ let v=s.val(); if(typeof v==="string"){try{v=JSON.parse(v);}catch(e){v=[];}}
-  FAT=(v||[]).filter(r=>r&&r.sire); computeSirePerf(); updStatus(); if(curFemale)renderBulls(); }).catch(()=>{}); }
+  FAT=(v||[]).filter(r=>r&&r.sire); computeSirePerf(); updStatus(); if(curFemale)renderBulls();
+  if(lastSelectedCow) applyCowSelection(lastSelectedCow, lastFarmLabel);   // 選択済みの母牛があれば産子成績を反映して再表示
+}).catch(()=>{}); }
+// 選択中の母牛の産子肥育成績を、読み込み済みのFATから集計（無ければURL経由の値にフォールバック）
+function progenyStatsFor(c){
+  if(FAT.length){
+    const isNagashima = cowSource==="nagashima";
+    const myMSire = c.maternalSire ? normalizeSireName(String(c.maternalSire).trim()) : "";
+    const recs = FAT.filter(r=>{
+      if(String(r.dam||"").trim() !== String(c.name||"").trim()) return false;
+      const f=(r.farmer||"").trim();
+      if(isNagashima){ if(!f.includes("長島")) return false; }
+      else { if(f && !f.includes("小原")) return false; }
+      if(myMSire){ const rms=normalizeSireName(String(r.grandsire||"").trim()); if(rms && rms!==myMSire) return false; }
+      return true;
+    });
+    if(recs.length){
+      const ws=recs.map(r=>r.weight).filter(w=>typeof w==="number"&&!isNaN(w));
+      const avgW=ws.length?Math.round(ws.reduce((a,b)=>a+b,0)/ws.length):null;
+      const a4=recs.filter(r=>/^[AB][45]$/.test(r.meatGrade||"")).length;
+      return { count:recs.length, avgWeight:avgW, a4Rate:Math.round(a4/recs.length*100) };
+    }
+    return null;   // FATは読み込み済みだがこの牛の産子は無い
+  }
+  // FAT未読み込み時：URL経由で渡された値があればそれを暫定表示
+  if(c.progCount) return { count:c.progCount, avgWeight:c.progAvgWeight, a4Rate:c.progA4Rate };
+  return null;
+}
 function qnum(mg){ const m=String(mg||"").match(/[1-5]/); return m?+m[0]:0; }
 function computeSirePerf(){
   // 性別（去勢/未経産）ごとの枝重・歩留率の平均/SD（♂♀で水準が違うため性別内で評価）
@@ -464,14 +492,24 @@ function selectCow(idx){ const c=currentCowList()[idx];
   applyCowSelection(c, cowSource==="nagashima"?"長島牧場 ":"");
   closeModal("pickCowModal");
 }
-// 母牛オブジェクト{name,sire,maternalSire,gmSire,nationalId,tag}を選択状態に反映（一覧選択・URL連携で共用）
+// 母牛オブジェクト{name,sire,maternalSire,gmSire,nationalId,tag,progCount,progAvgWeight,progA4Rate}を選択状態に反映（一覧選択・URL連携で共用）
 function applyCowSelection(c, farmLabelPrefix){
+  lastSelectedCow=c; lastFarmLabel=farmLabelPrefix||"";
   curFemale={s1:toYomi(c.sire),s2:toYomi(c.maternalSire),s3:c.gmSire?toYomi(c.gmSire):"",s4:"",name:c.name,rawS1:c.sire,rawS2:c.maternalSire,rawS3:c.gmSire||"",nationalId:c.nationalId,farm:cowSource};
   const miss=[]; [c.sire,c.maternalSire,c.gmSire].forEach(x=>{ if(x&&!K2Y[x]&&!isHira(x))miss.push(x); });
   const box=document.getElementById("selCow");
+  const prog = progenyStatsFor(c);
+  const progHtml = prog ? (
+    '<div style="background:var(--bg2,#f5f5f5);border:1px solid #ddd;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;">'
+    +'🥩 産子の肥育成績（'+prog.count+'頭）'
+    +(prog.avgWeight?'　平均枝重 '+prog.avgWeight+'kg':'')
+    +(prog.a4Rate!=null?'　A4以上率 '+prog.a4Rate+'%':'')
+    +'</div>'
+  ) : (FAT.length ? '<div style="color:#999;font-size:11px;margin-top:6px;">この母牛の産子の肥育成績データはまだありません</div>' : '');
   box.innerHTML='<b>'+esc(c.name)+'</b>（'+(farmLabelPrefix||"")+esc(c.tag||"")+' '+esc(c.nationalId||"")+'）'
     +'<div class="ped">父：'+esc(c.sire||"—")+' ／ 母の父：'+esc(c.maternalSire||"—")+(c.gmSire?' ／ 祖母の父：'+esc(c.gmSire):'')+'</div>'
-    +(miss.length?'<div class="warnbox">⚠ '+miss.map(esc).join("、")+' はマスタ未登録。正確な計算には血統追加が必要です。</div>':"");
+    +(miss.length?'<div class="warnbox">⚠ '+miss.map(esc).join("、")+' はマスタ未登録。正確な計算には血統追加が必要です。</div>':"")
+    +progHtml;
   box.classList.add("on");
   clearResult(); renderBulls();
 }
@@ -747,6 +785,9 @@ renderBulls();
     gmSire: p.get('damggsire') || '',
     nationalId: p.get('nationalId') || '',
     tag: p.get('tag') || '',
+    progCount: p.get('progCount') ? parseInt(p.get('progCount')) : 0,
+    progAvgWeight: p.get('progAvgWeight') ? parseInt(p.get('progAvgWeight')) : null,
+    progA4Rate: p.get('progA4Rate') !== null ? parseInt(p.get('progA4Rate')) : null,
   };
   applyCowSelection(c, '🐄 繁殖管理より ');
   toast('繁殖管理ツールから「'+dam+'」を受け取りました');
