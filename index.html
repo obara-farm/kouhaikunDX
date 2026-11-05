@@ -372,6 +372,10 @@ try{ firebase.initializeApp(firebaseConfig); kdb=firebase.database();
       semRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/semenInventory");
       fatRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/fatteningRecords");
       loadCows(); loadSemen(); loadFattening(); loadCloud();
+      // ★移行用（手順1）：長島牧場の在籍牛を、ログインしないと読めない Firebase に1回だけ保存する
+      try { const nref=kdb.ref("koubai/farms/nagashima_cows"); const js=JSON.stringify(NAGASHIMA_COWS);
+        nref.once("value").then(sn=>{ if(sn.val()!==js) return nref.set(js).then(()=>alert("✅ 長島牧場の牛の一覧をクラウドに保存しました。手順2のファイルに差し替えて大丈夫です。")); })
+          .catch(e=>alert("⚠ 長島牧場の牛の一覧を保存できませんでした："+(e&&e.message||e))); } catch(e){}
     } else { if(_kStarted){ location.reload(); return; } setStatus("ログインしてください"); kLoginShow(); }
   });
 }catch(e){ setStatus("オフライン（ローカルのみ）"); }
