@@ -360,14 +360,43 @@ const firebaseConfig={apiKey:"AIzaSyCer9Gz8nMbP3hBod3O_66oVQGEKsUfXVo",authDomai
 const FARM="obara";
 let kdb=null,kref=null,cowRef=null,semRef=null,fatRef=null;
 try{ firebase.initializeApp(firebaseConfig); kdb=firebase.database();
-  firebase.auth().signInAnonymously().catch(()=>setStatus("認証エラー（ローカルのみ）"));
-  firebase.auth().onAuthStateChanged(u=>{ if(u){ kref=kdb.ref("koubai/farms/"+FARM);
-    cowRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/cows");
-    semRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/semenInventory");
-    fatRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/fatteningRecords");
-    loadCows(); loadSemen(); loadFattening(); loadCloud(); }});
+  // ログイン（繁殖管理と同じアカウント）。以前は匿名で自動ログインしていたが、URLを知っていれば誰でもデータを見られたのでやめた。
+  // 繁殖管理と同じサイトなので、どちらかでログインすれば、もう一方も自動でログインされる。
+  let _kStarted=false;
+  firebase.auth().onAuthStateChanged(u=>{
+    if(u && u.isAnonymous){ firebase.auth().signOut(); return; }   // 以前の匿名ログインが残っていたら消す
+    if(u){ const ov=document.getElementById("k-login"); if(ov) ov.remove();
+      if(_kStarted) return; _kStarted=true;
+      kref=kdb.ref("koubai/farms/"+FARM);
+      cowRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/cows");
+      semRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/semenInventory");
+      fatRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/fatteningRecords");
+      loadCows(); loadSemen(); loadFattening(); loadCloud();
+    } else { if(_kStarted){ location.reload(); return; } setStatus("ログインしてください"); kLoginShow(); }
+  });
 }catch(e){ setStatus("オフライン（ローカルのみ）"); }
 function setStatus(t){ document.getElementById("syncStatus").textContent=t; }
+function kLoginShow(){
+  if(document.getElementById("k-login")) return;
+  const w=document.createElement("div"); w.id="k-login";
+  w.style.cssText="position:fixed;inset:0;background:rgba(15,17,23,.97);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;";
+  w.innerHTML='<div style="background:#181b24;border:1px solid #2a2f3d;border-radius:16px;padding:24px;width:100%;max-width:360px;color:#e5e7eb;">'
+   +'<div style="font-size:20px;font-weight:900;margin-bottom:4px;">🐂 交配くんDX</div>'
+   +'<div style="font-size:12px;color:#8892b0;margin-bottom:16px;">繁殖管理と同じアカウントでログインしてください</div>'
+   +'<input id="kl-email" type="email" placeholder="メールアドレス" autocomplete="email" style="width:100%;box-sizing:border-box;padding:12px;margin-bottom:10px;border-radius:10px;border:1px solid #2a2f3d;background:#1f2330;color:#e5e7eb;font-size:15px;">'
+   +'<input id="kl-pass" type="password" placeholder="パスワード" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:12px;margin-bottom:10px;border-radius:10px;border:1px solid #2a2f3d;background:#1f2330;color:#e5e7eb;font-size:15px;">'
+   +'<div id="kl-err" style="font-size:12px;color:#f87171;min-height:18px;margin-bottom:8px;"></div>'
+   +'<button id="kl-btn" style="width:100%;padding:12px;border-radius:10px;border:none;background:#22c55e;color:#000;font-weight:900;font-size:15px;cursor:pointer;">ログイン</button></div>';
+  document.body.appendChild(w);
+  const go=()=>{ const e=document.getElementById("kl-email").value.trim(), p=document.getElementById("kl-pass").value, err=document.getElementById("kl-err");
+    if(!e||!p){ err.textContent="メールアドレスとパスワードを入れてください"; return; }
+    err.style.color="#8892b0"; err.textContent="ログイン中…";
+    firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(()=>firebase.auth().signInWithEmailAndPassword(e,p)).catch(x=>{
+      err.style.color="#f87171"; const c=(x&&x.code)||"";
+      err.textContent=/wrong-password|invalid-credential|invalid-login-credentials|user-not-found|invalid-email/.test(c)?"メールアドレスかパスワードが違います":/too-many-requests/.test(c)?"しばらく待ってからもう一度試してください":/network-request-failed/.test(c)?"インターネットにつながっていません":"ログインできませんでした（"+c+"）"; }); };
+  document.getElementById("kl-btn").onclick=go;
+  document.getElementById("kl-pass").addEventListener("keydown",ev=>{ if(ev.key==="Enter") go(); });
+}
 
 // ===== 肥育成績データ（種雄牛の産子成績・推奨に使用）=====
 let FAT=[]; let SIRE_PERF={}; // 種雄牛名(漢字) -> 成績
