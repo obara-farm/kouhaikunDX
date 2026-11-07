@@ -358,7 +358,8 @@ function isHira(s){ return /^[ぁ-んー]+$/.test(s||""); }
 // ===== Firebase =====
 const firebaseConfig={apiKey:"AIzaSyCer9Gz8nMbP3hBod3O_66oVQGEKsUfXVo",authDomain:"breeding-manager5.firebaseapp.com",databaseURL:"https://breeding-manager5-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"breeding-manager5",storageBucket:"breeding-manager5.firebasestorage.app",messagingSenderId:"663663293010",appId:"1:663663293010:web:eaef68dee692fe1322258b"};
 const FARM="obara";
-let kdb=null,kref=null,cowRef=null,semRef=null,fatRef=null;
+let kdb=null,kref=null,cowRef=null,semRef=null,fatRef=null,calfRef=null;
+let CALVES=[]; // 繁殖管理の子牛（体格の評価・種雄牛との相性に使う）
 try{ firebase.initializeApp(firebaseConfig); kdb=firebase.database();
   // ログイン（繁殖管理と同じアカウント）。以前は匿名で自動ログインしていたが、URLを知っていれば誰でもデータを見られたのでやめた。
   // 繁殖管理と同じサイトなので、どちらかでログインすれば、もう一方も自動でログインされる。
@@ -371,7 +372,8 @@ try{ firebase.initializeApp(firebaseConfig); kdb=firebase.database();
       cowRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/cows");
       semRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/semenInventory");
       fatRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/fatteningRecords");
-      loadCows(); loadSemen(); loadFattening(); loadCloud(); loadNagashimaCows();
+      calfRef=kdb.ref("data/FhVF92oHJXMwK01gakK1Mms4HGP2/calves");
+      loadCows(); loadSemen(); loadFattening(); loadCloud(); loadNagashimaCows(); loadCalves();
     } else { if(_kStarted){ location.reload(); return; } setStatus("ログインしてください"); kLoginShow(); }
   });
 }catch(e){ setStatus("オフライン（ローカルのみ）"); }
@@ -515,7 +517,7 @@ function computeSirePerf(){
   SIRE_PERF={}; rows.forEach(r=>SIRE_PERF[r.name]=r);
 }
 function loadCows(){ if(!cowRef)return; cowRef.once("value").then(s=>{ let v=s.val(); if(typeof v==="string"){try{v=JSON.parse(v);}catch(e){v=[];}}
-  COWS=(v||[]).filter(c=>c&&c.name).map(c=>({name:c.name,nationalId:c.nationalId||"",sire:c.sire||"",maternalSire:c.maternalSire||""}));
+  COWS=(v||[]).filter(c=>c&&c.name).map(c=>({name:c.name,nationalId:c.nationalId||"",sire:c.sire||"",maternalSire:c.maternalSire||"",tag:c.id||""}));
   updStatus(); }).catch(()=>setStatus("在籍牛の読込に失敗")); }
 function loadSemen(){ if(!semRef)return; semRef.once("value").then(s=>{ let v=s.val(); if(typeof v==="string"){try{v=JSON.parse(v);}catch(e){v=[];}}
   SEMEN=(v||[]).filter(x=>x&&x.name&&x.breed==="褐毛"&&(x.stock||0)>0).map(x=>({name:x.name,stock:x.stock||0,regNo:x.regNo||""}));
@@ -702,18 +704,97 @@ function togglePed(e,yomi,name){ e.stopPropagation(); const p=document.getElemen
   else { p.style.display="none"; e.target.textContent="▼ "+name+"の血統を見る"; }
 }
 
+function loadCalves(){ if(!calfRef)return; calfRef.once("value").then(s=>{ let v=s.val(); if(typeof v==="string"){try{v=JSON.parse(v);}catch(e){v=[];}}
+  CALVES=(v||[]).filter(c=>c&&c.sire); if(lastSelectedCow) applyCowSelection(lastSelectedCow,lastFarmLabel); }).catch(()=>{}); }
+
+// ===== この母牛から見たおすすめ（①母×種の実績 ②子の体格 ③母の父との相性 ④母の弱点を補う）=====
+// 1頭の肥育成績を4項目の偏差値の平均にする（BMS・枝重・歩留・A4以上）
+function recDev(r){
+  const st=computeFatDevStats(); const d=(v,k)=>(typeof v==="number"&&!isNaN(v)&&st[k].sd>0)?50+(v-st[k].m)/st[k].sd*10:null;
+  const hi=/^[AB][45]$/.test(r.meatGrade||"")?100:0;
+  const a=[d(r.bms,"bms"),d(r.weight,"weight"),d(r.yieldRate,"yieldRate"),st.highRate.sd>0?50+(hi-st.highRate.m)/st.highRate.sd*10:null].filter(v=>v!=null);
+  return a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+}
+function _farmOk(r){ const f=(r.farmer||"").trim(); return cowSource==="nagashima" ? (!f||f.includes("長島")) : (!f||f.includes("小原")); }
+// ① この母牛×その種雄牛の子の肥育成績
+function damSirePerf(c){
+  const out={}; if(!c||!FAT.length)return out;
+  FAT.filter(r=>String(r.dam||"").trim()===String(c.name||"").trim()&&_farmOk(r)).forEach(r=>{
+    const s=normalizeSireName(String(r.sire||"").trim()); if(!s)return; const dv=recDev(r);
+    (out[s]=out[s]||{n:0,devs:[],grades:[]}); out[s].n++; if(dv!=null)out[s].devs.push(dv); if(r.meatGrade)out[s].grades.push(r.meatGrade); });
+  Object.values(out).forEach(o=>{ o.score=o.devs.length?o.devs.reduce((a,b)=>a+b,0)/o.devs.length:null; });
+  return out;
+}
+// ② この母牛の子の体格（出荷時1〜2＝相性が悪い。出荷前は育成舎①・②の評価で仮判定）
+function damSireSize(c){
+  const out={}; if(!c||!CALVES.length||cowSource==="nagashima")return out;
+  const tag=String(c.tag||"").trim(); if(!tag)return out;
+  CALVES.filter(k=>String(k.damId||"").trim()===tag).forEach(k=>{
+    const sc=(k.moves||[]).filter(m=>Number(m.score)>=1&&Number(m.score)<=5).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    if(!sc.length)return; const ship=sc.find(m=>m.to==="出荷"); const last=ship||sc[sc.length-1];
+    const s=normalizeSireName(String(k.sire||"").trim()); if(!s)return;
+    (out[s]=out[s]||{list:[]}).list.push({score:+last.score,final:!!ship});
+  });
+  Object.values(out).forEach(o=>{ o.finalBad=o.list.filter(x=>x.final&&x.score<=2).length; o.provBad=o.list.filter(x=>!x.final&&x.score<=2).length;
+    o.good=o.list.filter(x=>x.score>=4).length; o.level=o.finalBad?"avoid":o.provBad?"caution":"ok"; });
+  return out;
+}
+// ③ 同じ「母の父」を持つ母牛たちに、その種雄牛を付けたときの成績（ニック）
+function nickPerf(c){
+  const out={}; const ms=normalizeSireName(String(c&&c.maternalSire||"").trim()); if(!ms||!FAT.length)return out;
+  FAT.filter(r=>normalizeSireName(String(r.grandsire||"").trim())===ms).forEach(r=>{
+    const s=normalizeSireName(String(r.sire||"").trim()); if(!s)return; const dv=recDev(r);
+    (out[s]=out[s]||{n:0,devs:[]}); out[s].n++; if(dv!=null)out[s].devs.push(dv); });
+  Object.values(out).forEach(o=>{ o.score=o.devs.length?o.devs.reduce((a,b)=>a+b,0)/o.devs.length:null; });
+  return out;
+}
+// ④ 母牛の子の弱いところ（偏差値45未満の項目）
+function damWeak(c){
+  if(!c||!FAT.length)return [];
+  const recs=FAT.filter(r=>String(r.dam||"").trim()===String(c.name||"").trim()&&_farmOk(r)); if(recs.length<2)return [];
+  const st=computeFatDevStats(); const m=(k)=>{const v=recs.map(r=>r[k]).filter(x=>typeof x==="number"&&!isNaN(x)); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
+  const d=(v,k)=>v!=null&&st[k].sd>0?50+(v-st[k].m)/st[k].sd*10:null;
+  const hi=recs.filter(r=>/^[AB][45]$/.test(r.meatGrade||"")).length/recs.length*100;
+  const t=[["bms","BMS",d(m("bms"),"bms")],["weight","枝重",d(m("weight"),"weight")],["yield","歩留",d(m("yieldRate"),"yieldRate")],["a4","A4以上率",st.highRate.sd>0?50+(hi-st.highRate.m)/st.highRate.sd*10:null]];
+  return t.filter(x=>x[2]!=null&&x[2]<45).map(x=>({key:x[0],label:x[1],dev:x[2]}));
+}
+// 種雄牛の項目ごとの強さ（種雄牛どうしの偏差値）
+let _bullTraitStats=null;
+function bullTraitDev(perf,key){
+  if(!perf)return null;
+  if(!_bullTraitStats){ const rows=Object.values(SIRE_PERF); const f={bms:r=>r.avgBms,weight:r=>r.wSexIdx,yield:r=>r.ySexIdx,a4:r=>r.rateA4}; _bullTraitStats={};
+    Object.keys(f).forEach(k=>{ const v=rows.map(f[k]).filter(x=>typeof x==="number"); const mm=v.length?v.reduce((a,b)=>a+b,0)/v.length:0; const sd=v.length?Math.sqrt(v.reduce((a,b)=>a+(b-mm)*(b-mm),0)/v.length):0; _bullTraitStats[k]={m:mm,sd,f:f[k]}; }); }
+  const s=_bullTraitStats[key]; const v=s&&s.f(perf); return (typeof v==="number"&&s.sd>0)?50+(v-s.m)/s.sd*10:null;
+}
 let _allRows=[]; // ③の全結果を保持（検索用）
 function calcAll(){
   if(!curFemale){ toast("先に母牛を選んでください"); return; }
   const stockMap={}; SEMEN.forEach(s=>{const y=toYomi(s.name); if(y)stockMap[y]=s.stock;});
   _allRows=[];
+  const DSP=damSirePerf(lastSelectedCow), DSZ=damSireSize(lastSelectedCow), NICK=nickPerf(lastSelectedCow), WEAK=damWeak(lastSelectedCow);
+  _bullTraitStats=null;
+  window._kWeak=WEAK;
   for(let i=0;i<MC.A.length;i++){ const y=MC.A[i], nm=MC.B[i]||y;
     const coef=engine.compute(curFemale.s1,curFemale.s2,curFemale.s3,curFemale.s4,y);
     const perf=SIRE_PERF[normalizeSireName(nm)]||SIRE_PERF[nm]||null;
     // おすすめスコア：成績★（perfScore）ベース、近交リスクで減点、危険は大幅減点
-    let rec=null;
-    if(perf&&perf.perfScore!=null){ rec=perf.perfScore; if(coef>=12.5)rec-=30; else if(coef>=6.25)rec-=8; }
-    _allRows.push({name:nm,yomi:y,stock:stockMap[y]||0,keitou:keitouOf(nm,y),coef:coef,perf:perf,rec:rec});
+    const key=normalizeSireName(nm);
+    const ds=DSP[key]||null, sz=DSZ[key]||null, nk=NICK[key]||null;
+    const why=[]; let rec=null, adj=0, has=false;
+    if(perf&&perf.perfScore!=null){ rec=perf.perfScore; has=true; }
+    // ① この母×この種の実績（頭数が少ないほど弱く効かせる）
+    if(ds&&ds.score!=null){ const a=(ds.score-50)*ds.n/(ds.n+2)*0.6; adj+=a; has=true; why.push({t:'この母×この種 '+ds.n+'頭（'+(ds.grades.slice(0,4).join('・')||'—')+'）'+(a>=0?'↑':'↓'),c:a>=0?'#16a34a':'#dc2626'}); }
+    // ② 子の体格：出荷時1〜2はお勧めしない
+    if(sz){ if(sz.level==="avoid"){ adj-=25; has=true; why.push({t:'🚫 子の出荷時体格が1〜2（相性が悪い）',c:'#dc2626'}); }
+      else if(sz.level==="caution"){ adj-=8; has=true; why.push({t:'⚠ 子の体格が育成中に1〜2',c:'#d97706'}); }
+      else if(sz.good){ adj+=3; has=true; why.push({t:'子の体格が良い（4〜5）',c:'#16a34a'}); } }
+    // ③ 母の父との相性
+    if(nk&&nk.score!=null&&nk.n>=2){ const a=(nk.score-50)*nk.n/(nk.n+5)*0.4; adj+=a; has=true; why.push({t:'母の父'+curFemale.rawS2+'との相性 '+nk.n+'頭'+(a>=0?'↑':'↓'),c:a>=0?'#16a34a':'#dc2626'}); }
+    // ④ 母の子の弱点を補う種
+    if(WEAK.length&&perf){ let a=0; const hit=[]; WEAK.forEach(w=>{ const bd=bullTraitDev(perf,w.key); if(bd!=null){ const v=(bd-50)*(50-w.dev)/10*0.3; a+=v; if(bd>=55)hit.push(w.label); } });
+      a=Math.max(-8,Math.min(8,a)); adj+=a; if(hit.length){ has=true; why.push({t:'弱い'+hit.join('・')+'を補う',c:'#2563eb'}); } }
+    if(has){ if(rec==null)rec=50; rec+=adj; if(coef>=12.5)rec-=30; else if(coef>=6.25)rec-=8; rec=Math.round(rec*10)/10; }
+    _allRows.push({name:nm,yomi:y,stock:stockMap[y]||0,keitou:keitouOf(nm,y),coef:coef,perf:perf,rec:rec,why:why,avoid:!!(sz&&sz.level==="avoid")});
   }
   _allRows.sort((a,b)=>a.coef-b.coef);
   document.getElementById("resultCard").style.display="";
@@ -739,7 +820,7 @@ function renderResults(){
     rows=rows.slice().sort((a,b)=>{ const ra=a.rec==null?-999:a.rec, rb=b.rec==null?-999:b.rec; if(rb!==ra)return rb-ra; return a.coef-b.coef; });
   }
   const hint = sort==="recommend"
-    ? '⭐おすすめ順：成績★（産子の肥育成績）が高く近交が安全な順｜成績★＝枝重40%＋A4以上率40%＋歩留率20%を偏差値化（枝重・歩留は去勢／未経産で分けて評価）。近交リスクは減点（🔴危険は大幅減点）｜🐂＝在庫あり'
+    ? '⭐おすすめ順：この母牛から見て良い順。種雄牛の成績★に、①この母×この種の子の成績 ②子の体格（出荷時1〜2は大きく下げる）③母の父との相性 ④母の子の弱点（'+((window._kWeak||[]).map(w=>w.label).join('・')||'なし')+'）を補えるか、を足し引きしています（頭数が少ないほど控えめ）｜成績★＝枝重40%＋A4以上率40%＋歩留率20%を偏差値化（枝重・歩留は去勢／未経産で分けて評価）。近交リスクは減点（🔴危険は大幅減点）｜🐂＝在庫あり'
     : rows.length+'頭を近交係数の低い順（🐂＝在庫あり）';
   document.getElementById("results").innerHTML=
     '<div class="hint">'+hint+'</div>'
@@ -751,6 +832,7 @@ function renderResults(){
       let wtxt = (wc!=null||wh!=null) ? ('枝重'+(wc!=null?'♂'+wc:'')+(wc!=null&&wh!=null?'/':'')+(wh!=null?'♀'+wh:'')) : ('枝重'+(r.perf.avgW!=null?Math.round(r.perf.avgW):'—'));
       perfBadge='<span class="rperf">'+wtxt+'・A4以上'+Math.round(r.perf.rateA4)+'%'+(r.perf.perfScore!=null?'・成績★'+r.perf.perfScore:'')+'</span>'; }
     else { perfBadge='<span class="rperf none">成績データなし</span>'; }
+    if(r.why&&r.why.length) perfBadge+='<span style="display:block;font-size:10px;line-height:1.5;margin-top:2px;">'+r.why.map(w=>'<span style="color:'+w.c+';margin-right:6px;">'+esc(w.t)+'</span>').join('')+'</span>';
     return '<div class="result-row '+cls+'"><span class="rank">'+rank+'</span><span class="bull">'+(r.stock?'🐂 ':'')+esc(r.name)+' <span class="yomi">'+esc(r.keitou)+(r.stock?'・在庫'+r.stock+'本':'')+'</span>'+perfBadge+'</span><span class="tag">'+tag+'</span><span class="coef">'+r.coef.toFixed(2)+'<span class="pct">%</span></span></div>';
   }).join("") || '<div class="empty">該当なし</div>';
 }
