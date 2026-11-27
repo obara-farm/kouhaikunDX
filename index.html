@@ -116,6 +116,12 @@ input[type=text]:focus{outline:none;border-color:var(--akane);}
     <button class="btn big-pick" onclick="openPickCow()">📋 在籍牛から選ぶ</button>
     <div class="selbox" id="selCow"></div>
     <div class="hint">在籍牛を選ぶと父・母の父が自動で入り、種雄牛を選べるようになります。</div>
+    <div id="fukueiBox"></div>
+  </div>
+
+  <div class="card" id="card-fukuei-all">
+    <h2>🐄 福栄豊をおすすめする母牛</h2>
+    <div id="fukueiAll"><div class="hint">在籍牛と精液在庫を読みこむと出ます。</div></div>
   </div>
 
   <div class="card">
@@ -631,7 +637,60 @@ function renderBulls(){
     html+='</div></div>';
   });
   document.getElementById("bullList").innerHTML=html||'<div class="hint">種雄牛がありません</div>';
+  try{ renderFukuei(); }catch(e){ console.warn("fukuei",e); }
 }
+
+// ===== ★ 2026/11/27：福栄豊で近交を下げたほうがいいかの判定 =====
+// 在庫のある種（福栄豊をのぞく）でいちばん低い近交係数と、福栄豊の近交係数をくらべる。境目は「安全・注意・危険な交配」と同じ 6.25%・12.5%
+//   ◎ 在庫の種はどれも6.25%以上なのに、福栄豊なら6.25%未満　○ 在庫の種にも6.25%未満がある　△ 福栄豊でも1%未満しか下がらない
+const FUKUEI="福栄豊";
+function _fkLevel(v){ return v>=12.5?"危険":v>=6.25?"注意":"安全"; }
+function fukueiJudge(f){
+  const fy=toYomi(FUKUEI); if(!f||!f.s1||!fy||MC.A.indexOf(fy)<0) return null;
+  const fk=engine.compute(f.s1,f.s2,f.s3,f.s4,fy);
+  const others=SEMEN.filter(x=>x.name!==FUKUEI).map(x=>({name:x.name,yomi:toYomi(x.name)})).filter(x=>x.yomi&&MC.A.indexOf(x.yomi)>=0)
+    .map(x=>({name:x.name,v:engine.compute(f.s1,f.s2,f.s3,f.s4,x.yomi)})).sort((a,b)=>a.v-b.v);
+  if(!others.length) return {fk,others,best:null,mid:null,mark:"",msg:"在庫のある種の血統が入っていないので、くらべられません"};
+  const best=others[0], mid=others[Math.floor((others.length-1)/2)];
+  let mark,msg;
+  if(mid.v<6.25){ mark="△"; msg="在庫の種の真ん中でも "+mid.v.toFixed(2)+"%（安全）。近交を下げるために福栄豊を使わなくても大丈夫です"; }
+  else if(fk<6.25&&fk<=best.v+0.5){ mark="◎"; msg="在庫の種の真ん中だと "+mid.v.toFixed(2)+"%（"+_fkLevel(mid.v)+"）。福栄豊なら "+fk.toFixed(2)+"%（安全）で、在庫の種の中でもいちばん低い組です"; }
+  else if(best.v<fk-0.5){ mark="○"; msg=best.name+" のほうが "+best.v.toFixed(2)+"% と低いです（福栄豊は "+fk.toFixed(2)+"%・"+_fkLevel(fk)+"）"+(fk<6.25?"。福栄豊でも安全です":""); }
+  else { mark="○"; msg="福栄豊で "+fk.toFixed(2)+"% まで下がりますが、まだ"+_fkLevel(fk)+"です"; }
+  return {fk,others,best,mid,mark,msg};
+}
+function renderFukuei(){
+  const box=document.getElementById("fukueiBox");
+  if(box){
+    const J=curFemale?fukueiJudge(curFemale):null;
+    if(!curFemale||!J){ box.innerHTML=curFemale?'<div class="hint" style="margin-top:8px;">福栄豊の判定：この母牛の血統か、福栄豊の血統が入っていないので出せません</div>':''; }
+    else {
+      const ln=(a,b)=>'<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid #eee;font-size:13px;"><span>'+a+'</span><b style="font-family:ui-monospace,Menlo,monospace;white-space:nowrap;">'+b+'</b></div>';
+      const fs=SEMEN.find(x=>x.name===FUKUEI);
+      box.innerHTML='<div style="border:1px solid #ddd;border-radius:10px;padding:10px 12px;margin-top:10px;">'
+        +'<div style="font-size:13px;font-weight:700;margin-bottom:4px;">🧬 福栄豊で近交を下げたほうがいい？</div>'
+        +'<div style="border:2px solid #222;border-radius:9px;padding:8px 10px;margin:6px 0;"><div style="font-size:16px;font-weight:900;">'+J.mark+' '+(J.mark==="◎"?"福栄豊をおすすめ":J.mark==="○"?"ほかの種も考える":J.mark==="△"?"近交を下げなくてよい":"")+'</div><div style="font-size:12px;color:#333;margin-top:2px;">'+esc(J.msg)+'</div></div>'
+        +ln('福栄豊'+(fs?'（在庫'+fs.stock+'本）':'（在庫なし）'),J.fk.toFixed(2)+'%　'+_fkLevel(J.fk))
+        +(J.best?ln('在庫の種でいちばん低い：'+esc(J.best.name),J.best.v.toFixed(2)+'%　'+_fkLevel(J.best.v)):'')
+        +(J.mid?ln('在庫の種の真ん中',J.mid.v.toFixed(2)+'%　'+_fkLevel(J.mid.v)):'')
+        +'<div class="hint" style="margin-top:6px;">◎＝ふだんの種（在庫の種の真ん中）だと6.25%以上で、福栄豊なら6.25%未満かつ在庫の中でもいちばん低い（差0.5%以内）。○＝ほかの種のほうが低いか、福栄豊でもまだ注意以上。△＝ふだんの種でも6.25%未満で、下げなくてよい。</div></div>';
+    }
+  }
+  const all=document.getElementById("fukueiAll"); if(!all) return;
+  if(!COWS.length||!SEMEN.length){ all.innerHTML='<div class="hint">在籍牛と精液在庫を読みこむと出ます。</div>'; return; }
+  const rows=[]; let n=0;
+  COWS.forEach((c,idx)=>{ const s1=toYomi(c.sire); if(!s1||MC.A.indexOf(s1)<0) return;
+    const J=fukueiJudge({s1,s2:toYomi(c.maternalSire),s3:c.gmSire?toYomi(c.gmSire):"",s4:""}); if(!J||!J.best) return; n++;
+    if(J.mark==="◎") rows.push({c,idx,J}); });
+  rows.sort((a,b)=>b.J.best.v-a.J.best.v);
+  const fs=SEMEN.find(x=>x.name===FUKUEI);
+  all.innerHTML='<div class="hint" style="margin-bottom:6px;">血統が入っている母牛 '+n+'頭のうち ◎ <b>'+rows.length+'頭</b>　／　福栄豊の在庫 <b>'+(fs?fs.stock:0)+'本</b></div>'
+    +(rows.length?'<table style="width:100%;border-collapse:collapse;font-size:12.5px;"><tr><th style="text-align:left;color:#666;font-weight:600;padding:5px 4px;border-bottom:1px solid #eee;">母牛</th><th style="text-align:right;color:#666;font-weight:600;padding:5px 4px;border-bottom:1px solid #eee;">在庫の種で最低</th><th style="text-align:right;color:#666;font-weight:600;padding:5px 4px;border-bottom:1px solid #eee;">福栄豊</th></tr>'
+      +rows.map(r=>'<tr onclick="_fkPick('+r.idx+')" style="cursor:pointer;"><td style="padding:6px 4px;border-bottom:1px solid #eee;"><b>'+esc(r.c.name)+'</b> <span style="color:#888;font-size:11px;">'+esc(r.c.tag||"")+'</span></td><td style="text-align:right;padding:6px 4px;border-bottom:1px solid #eee;">'+r.J.best.v.toFixed(2)+'%</td><td style="text-align:right;padding:6px 4px;border-bottom:1px solid #eee;font-weight:700;">'+r.J.fk.toFixed(2)+'%</td></tr>').join('')+'</table>'
+      :'<div class="hint">いまは、福栄豊をおすすめする母牛はいません。</div>')
+    +'<div class="hint" style="margin-top:6px;">押すとその母牛を選びます。小原農場の在籍牛だけ（長島牧場の牛は「在籍牛から選ぶ」で長島を選んでから、1頭ずつ見てください）。</div>';
+}
+function _fkPick(idx){ const c=COWS[idx]; if(!c) return; applyCowSelection(c,""); document.getElementById("card-female").scrollIntoView({behavior:"smooth"}); }
 
 function pickBull(yomi,name){
   if(!curFemale){ toast("先に母牛を選んでください"); document.getElementById("card-female").scrollIntoView({behavior:"smooth"}); return; }
